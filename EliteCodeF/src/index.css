@@ -1,0 +1,222 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --void: #050816;
+    --surface: #0b1020;
+    --panel: rgba(13, 18, 31, 0.84);
+    --panel-strong: rgba(9, 13, 24, 0.94);
+    --panel-hover: rgba(22, 28, 44, 0.92);
+    --border-soft: rgba(255, 255, 255, 0.08);
+    --cyan: #00f0ff;
+    --magenta: #ff00a0;
+    --violet: #7b2dff;
+    --txt-primary: #edf1ff;
+    --txt-secondary: #9aa3bf;
+    --txt-muted: #66708e;
+  }
+
+  html[data-theme='aurora'] {
+    --void: #050816;
+    --surface: #0b1020;
+  }
+
+  html[data-theme='midnight'] {
+    --void: #040712;
+    --surface: #09101e;
+    --cyan: #4cc9ff;
+    --violet: #5975ff;
+  }
+
+  html[data-theme='graphite'] {
+    --void: #090b12;
+    --surface: #0d1117;
+    --cyan: #81a4ff;
+    --magenta: #c77dff;
+    --violet: #9a88ff;
+  }
+
+  html[data-theme='sage'] {
+    --void: #07110f;
+    --surface: #0a1513;
+    --cyan: #45d8c4;
+    --magenta: #7cf2a5;
+    --violet: #4bb4ff;
+  }
+
+  * {
+    @apply border-white/5;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--void);
+    color: var(--txt-primary);
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    background-image:
+      radial-gradient(ellipse at 18% 18%, rgba(0, 240, 255, 0.04) 0%, transparent 42%),
+      radial-gradient(ellipse at 82% 80%, rgba(123, 45, 255, 0.05) 0%, transparent 44%),
+      radial-gradient(ellipse at 50% 0%, rgba(255, 0, 160, 0.03) 0%, transparent 36%);
+  }
+
+  ::selection {
+    @apply bg-cyan/30 text-white;
+  }
+
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-white/20;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 24%), var(--panel);
+    backdrop-filter: blur(24px) saturate(140%);
+    border: 1px solid var(--border-soft);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+  }
+
+  .leetcode-panel {
+    background: rgba(13, 18, 31, 0.88);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.18);
+    backdrop-filter: blur(18px) saturate(130%);
+  }
+
+  .neon-border-cyan {
+    @apply border border-cyan/20 shadow-[0_0_15px_rgba(0,240,255,0.08)];
+  }
+
+  .neon-border-magenta {
+    @apply border border-magenta/20 shadow-[0_0_15px_rgba(255,0,160,0.08)];
+  }
+
+  .neon-border-violet {
+    @apply border border-violet/20 shadow-[0_0_15px_rgba(123,45,255,0.08)];
+  }
+
+  .btn-neon {
+    @apply relative overflow-hidden px-4 py-2 rounded-xl font-medium text-sm transition-all duration-300;
+    @apply bg-cyan/10 text-cyan border border-cyan/30;
+    @apply hover:bg-cyan/20 hover:shadow-glow-sm hover:border-cyan/50;
+    @apply active:scale-95;
+  }
+
+  .btn-neon-magenta {
+    @apply relative overflow-hidden px-4 py-2 rounded-lg font-medium text-sm transition-all duration-300;
+    @apply bg-magenta/10 text-magenta border border-magenta/30;
+    @apply hover:bg-magenta/20 hover:shadow-neon-magenta hover:border-magenta/50;
+    @apply active:scale-95;
+  }
+
+  .btn-neon-violet {
+    @apply relative overflow-hidden px-4 py-2 rounded-lg font-medium text-sm transition-all duration-300;
+    @apply bg-violet/10 text-violet border border-violet/30;
+    @apply hover:bg-violet/20 hover:shadow-neon-violet hover:border-violet/50;
+    @apply active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply px-3 py-2 rounded-lg text-sm text-txt-secondary transition-all duration-200;
+    @apply hover:text-txt-primary hover:bg-white/5;
+    @apply active:scale-95;
+  }
+
+  .input-neon {
+    @apply w-full rounded-2xl px-4 py-3 text-sm text-txt-primary;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid var(--border-soft);
+    @apply placeholder:text-txt-muted;
+    @apply focus:outline-none;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    border-color: var(--border-soft);
+  }
+
+  .input-neon:focus {
+    border-color: rgba(0, 240, 255, 0.35);
+    box-shadow: 0 0 0 4px rgba(0, 240, 255, 0.08);
+    @apply transition-all duration-300;
+  }
+
+  .message-bubble-user {
+    @apply rounded-2xl rounded-tr-sm px-5 py-4 text-txt-primary text-sm leading-relaxed;
+    background: linear-gradient(180deg, rgba(0, 240, 255, 0.11), rgba(123, 45, 255, 0.06));
+    border: 1px solid rgba(0, 240, 255, 0.16);
+  }
+
+  .message-bubble-ai {
+    @apply rounded-2xl rounded-tl-sm px-5 py-4 text-txt-primary text-sm leading-relaxed;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-soft);
+  }
+
+  .mode-pill {
+    @apply flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-300 cursor-pointer;
+    @apply text-txt-muted border border-transparent;
+    @apply hover:text-txt-primary hover:bg-white/5;
+  }
+
+  .mode-pill.active {
+    @apply text-cyan bg-cyan/10 border-cyan/30 shadow-glow-sm;
+  }
+
+  .chat-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-txt-secondary cursor-pointer transition-all duration-200;
+    @apply hover:text-txt-primary hover:bg-white/5;
+  }
+
+  .chat-item.active {
+    @apply text-txt-primary bg-white/5 border border-white/10;
+  }
+
+  .gradient-text {
+    background: linear-gradient(90deg, var(--cyan), var(--violet), var(--magenta));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .gradient-text-cyan {
+    background: linear-gradient(90deg, var(--cyan), var(--violet));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .shimmer-bg {
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.03) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+}
+
+@layer utilities {
+  .text-glow-cyan {
+    text-shadow: 0 0 20px rgba(0,240,255,0.5), 0 0 40px rgba(0,240,255,0.2);
+  }
+
+  .text-glow-magenta {
+    text-shadow: 0 0 20px rgba(255,0,160,0.5), 0 0 40px rgba(255,0,160,0.2);
+  }
+}
