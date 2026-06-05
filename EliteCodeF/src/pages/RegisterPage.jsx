@@ -1,36 +1,24 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Eye, EyeOff, User, ArrowRight } from 'lucide-react'
 import { authService } from '../api/authService'
-import { useAuth } from '../hooks/useAuth'
 import useToastStore from '../store/toastStore'
 import { NeonButton } from '../components/NeonButton'
 import { getErrorMessage } from '../utils/error'
-
-const extractAuthResponse = (data) => ({
-  userId: data?.userId || data?.data?.userId || data?.user?.id,
-  email: data?.email || data?.data?.email || data?.user?.email,
-  firstName: data?.firstName || data?.data?.firstName || data?.user?.firstName,
-  lastName: data?.lastName || data?.data?.lastName || data?.user?.lastName,
-  accessToken: data?.accessToken || data?.access_token || data?.token || data?.data?.accessToken,
-});
 
 export function RegisterPage() {
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', confirm: '' })
   const [showPass, setShowPass] = useState(false)
   const [errors, setErrors] = useState({})
-  const navigate = useNavigate()
-  const { login } = useAuth()
+  const [verificationEmail, setVerificationEmail] = useState('')
   const { addToast } = useToastStore()
 
   const { mutate: handleRegister, isPending } = useMutation({
     mutationFn: () => authService.register(form.firstName, form.lastName, form.email, form.password),
-    onSuccess: (data) => {
-      const { userId, email, firstName, lastName, accessToken } = extractAuthResponse(data);
-      login({ id: userId, email, firstName, lastName }, accessToken);
-      addToast('Account created!', 'success');
-      navigate('/');
+    onSuccess: () => {
+      setVerificationEmail(form.email)
+      addToast('Verification email sent', 'success')
     },
     onError: (error) => {
       const msg = getErrorMessage(error)
@@ -47,7 +35,7 @@ export function RegisterPage() {
     if (!form.lastName) errs.lastName = 'Required'
     if (!form.email) errs.email = 'Required'
     if (!form.password) errs.password = 'Required'
-    if (form.password.length < 6) errs.password = 'Min 6 chars'
+    if (form.password.length < 8) errs.password = 'Min 8 chars'
     if (form.password !== form.confirm) errs.confirm = 'No match'
     if (Object.keys(errs).length) { setErrors(errs); return }
     handleRegister()
@@ -59,7 +47,27 @@ export function RegisterPage() {
       <div className="absolute bottom-[-20%] left-[-10%] w-[500px] h-[500px] bg-cyan/5 rounded-full blur-[120px]" />
 
       <div className="relative w-full max-w-md glass-panel rounded-[32px] p-8">
-        <div className="text-center mb-10">
+        {verificationEmail ? (
+          <div className="text-center">
+            <div className="w-14 h-14 rounded-3xl bg-cyan/10 border border-cyan/25 flex items-center justify-center mx-auto mb-4 shadow-[0_20px_40px_rgba(0,240,255,0.08)]">
+              <User size={28} className="text-cyan" />
+            </div>
+            <p className="text-[10px] uppercase tracking-[0.28em] text-txt-muted mb-3">Verify your email</p>
+            <h1 className="text-3xl font-semibold gradient-text mb-3">Check your inbox</h1>
+            <p className="text-sm text-txt-secondary leading-relaxed mb-6">
+              We sent a verification link to <span className="text-txt-primary font-medium">{verificationEmail}</span>.
+              Open it to activate your account, then sign in.
+            </p>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left text-sm text-txt-secondary mb-6">
+              The link expires in 24 hours. If it does not arrive, check spam or send a fresh link from the sign-in page.
+            </div>
+            <Link to="/login" className="btn-neon inline-flex items-center justify-center">
+              Go to Sign In <ArrowRight size={16} className="ml-2" />
+            </Link>
+          </div>
+        ) : (
+          <>
+          <div className="text-center mb-10">
           <div className="w-14 h-14 rounded-3xl bg-gradient-to-br from-magenta to-violet flex items-center justify-center mx-auto mb-4 shadow-[0_20px_40px_rgba(255,0,160,0.12)]">
             <User size={28} className="text-white" />
           </div>
@@ -125,6 +133,8 @@ export function RegisterPage() {
           Already have one?{' '}
           <Link to="/login" className="text-cyan hover:text-cyan/80 font-medium transition-colors">Sign in</Link>
         </p>
+          </>
+        )}
       </div>
     </div>
   )

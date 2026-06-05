@@ -8,5 +8,7 @@ public record TokenPair(
         Long expiresIn,
         String refreshToken,
         UUID userId,
-        String email
+        String email,
+        String firstName,
+        String lastName
 ) {}

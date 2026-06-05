@@ -19,13 +19,13 @@ public class EmailServiceImpl implements EmailService {
     @Value("${spring.mail.username}")
     private String fromEmail;
 
-    @Value("${elitecode.app.base-url:http://localhost:8080}")
-    private String baseUrl;
+    @Value("${elitecode.frontend.base-url:http://localhost:5173}")
+    private String frontendBaseUrl;
 
     @Override
     @Async("emailExecutor")
     public void sendVerificationEmail(String to, String token) {
-        String verificationUrl = baseUrl + "/api/auth/verify-email?token=" + token;
+        String verificationUrl = frontendBaseUrl + "/verify-email?token=" + token;
         String subject = "Verify your email – EliteCode";
         String body = String.format("""
                 Hello,
@@ -49,7 +49,7 @@ public class EmailServiceImpl implements EmailService {
     @Override
     @Async("emailExecutor")
     public void sendPasswordResetEmail(String to, String token) {
-        String resetUrl = baseUrl + "/reset-password?token=" + token;
+        String resetUrl = frontendBaseUrl + "/reset-password?token=" + token;
         String subject = "Reset your password – EliteCode";
         String body = String.format("""
                 Hello,

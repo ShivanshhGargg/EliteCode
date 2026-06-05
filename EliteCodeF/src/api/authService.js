@@ -35,6 +35,9 @@ export const authService = {
   resetPassword: async (token, newPassword) => {
     await axiosClient.post('/auth/reset-password', { token, newPassword });
   },
+  verifyEmail: async (token) => {
+    await axiosClient.get(`/auth/verify-email?token=${encodeURIComponent(token)}`);
+  },
   resendVerification: async (email) => {
     await axiosClient.post('/auth/resend-verification', { email });
   },

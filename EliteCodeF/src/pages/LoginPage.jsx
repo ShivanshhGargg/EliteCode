@@ -34,7 +34,7 @@ export function LoginPage() {
     onSuccess: (data) => {
       const { userId, email, firstName, lastName, accessToken } = extractAuthResponse(data);
       login({ id: userId, email, firstName, lastName }, accessToken);
-      addToast('Account created!', 'success');
+      addToast('Signed in successfully', 'success');
       navigate('/');
     },
     onError: (error) => {
@@ -60,8 +60,8 @@ export function LoginPage() {
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
       const data = await authService.loginWithGoogle(credentialResponse.credential, showTotp ? totpCode : null)
-      const { userId, email: userEmail, accessToken } = extractAuthResponse(data)
-      login({ id: userId, email: userEmail }, accessToken)
+      const { userId, email: userEmail, firstName, lastName, accessToken } = extractAuthResponse(data)
+      login({ id: userId, email: userEmail, firstName, lastName }, accessToken)
       addToast('Google sign-in successful', 'success')
       navigate('/')
     } catch (error) {
@@ -167,6 +167,7 @@ export function LoginPage() {
 
             {errors.submit && errors.submit.includes('verify your email') && (
                 <button
+                    type="button"
                     onClick={() => resendVerification.mutate(email)}
                     className="text-xs text-cyan underline mt-2"
                 >

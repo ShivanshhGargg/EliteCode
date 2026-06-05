@@ -419,7 +419,9 @@ public class AuthServiceImpl implements AuthService {
                 jwtConfig.getExpirationMs() / 1000,
                 refreshToken,
                 user.getId(),
-                user.getEmail()
+                user.getEmail(),
+                user.getFirstName(),
+                user.getLastName()
         );
     }
 

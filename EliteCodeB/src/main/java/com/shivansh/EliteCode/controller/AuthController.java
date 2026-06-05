@@ -154,7 +154,9 @@ public class AuthController {
                 tokenPair.tokenType(),
                 tokenPair.expiresIn(),
                 tokenPair.userId(),
-                tokenPair.email()
+                tokenPair.email(),
+                tokenPair.firstName(),
+                tokenPair.lastName()
         );
     }
 

@@ -5,7 +5,7 @@ import com.shivansh.EliteCode.dto.response.common.PageResponse;
 import com.shivansh.EliteCode.dto.response.user.AccountResponse;
 import com.shivansh.EliteCode.dto.response.user.UserProfileResponse;
 import com.shivansh.EliteCode.dto.response.user.UserProgressResponse;
-import com.shivansh.EliteCode.model.User;
+import com.shivansh.EliteCode.repository.AccountRepository;
 import com.shivansh.EliteCode.security.UserPrincipal;
 import com.shivansh.EliteCode.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,6 +24,7 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+    private final AccountRepository accountRepository;
 
     @GetMapping("/me")
     @Operation(summary = "Get current user profile")
@@ -69,9 +70,17 @@ public class UserController {
 
     @GetMapping("/me/accounts")
     public ResponseEntity<List<AccountResponse>> getMyAccounts(@AuthenticationPrincipal UserPrincipal currentUser) {
-        User user = userService.getUserById(currentUser.getId());
-        return ResponseEntity.ok(user.getAccounts().stream()
-                .map(acc -> new AccountResponse(acc.getId(), acc.getProvider(), acc.getProviderId(), acc.getRole()))
+        return ResponseEntity.ok(accountRepository.findByUserId(currentUser.getId()).stream()
+                .map(acc -> new AccountResponse(
+                        acc.getId(),
+                        acc.getProvider(),
+                        acc.getProviderId(),
+                        acc.getRole(),
+                        acc.isEmailVerified(),
+                        acc.isTwoFactorEnabled(),
+                        acc.getCreatedAt(),
+                        acc.getLastLoginAt()
+                ))
                 .toList());
     }
 

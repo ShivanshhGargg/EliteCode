@@ -18,6 +18,7 @@ import { ProblemsPage } from './pages/ProblemsPage'
 import { AdminProblemsPage } from './pages/AdminProblemsPage'
 import { UserProgressPage } from './pages/UserProgressPage'
 import { AccountSettingsPage } from './pages/AccountSettingsPage'
+import { VerifyEmailPage } from './pages/VerifyEmailPage'
 
 export default function App() {
   const theme = useUIStore((state) => state.theme)
@@ -45,6 +46,7 @@ export default function App() {
               <Route path="/attempts" element={<AttemptsPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/verify-email" element={<VerifyEmailPage />} />
               <Route path="/problems" element={<ProblemsPage />} />
               <Route path="/admin/problems" element={<AdminProblemsPage />} />
               <Route path="/progress" element={<UserProgressPage />} />

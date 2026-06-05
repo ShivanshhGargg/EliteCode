@@ -7,5 +7,7 @@ public record AccessTokenResponse(
         String tokenType,
         Long expiresIn,
         UUID userId,
-        String email
+        String email,
+        String firstName,
+        String lastName
 ) {}
