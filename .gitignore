@@ -8,7 +8,8 @@ target/
 .mvn/
 mvnw
 mvnw.cmd
-src/main/resources/application.properties
+EliteCodeB/src/main/resources/application.properties
+EliteCodeB/src/test/resources/application.properties
 # =========================
 # Node / Frontend (React / Vite / Next)
 # =========================
