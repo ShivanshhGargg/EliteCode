@@ -326,7 +326,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public TokenPair refreshToken(String refreshToken) {
         // Validate token and extract claims
-        if (jwtTokenProvider.validateToken(refreshToken)) {
+        if (!jwtTokenProvider.isTokenValid(refreshToken)) {
             throw new CustomExceptions.BadRequestException("Invalid refresh token");
         }
         Map<String, Object> claims = jwtTokenProvider.extractClaims(refreshToken);

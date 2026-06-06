@@ -48,12 +48,12 @@ public class JwtTokenProvider {
         return encoder.encode(JwtEncoderParameters.from(header, claimsSet)).getTokenValue();
     }
 
-    public boolean validateToken(String token) {
+    public boolean isTokenValid(String token) {
         try {
             decoder.decode(token);
-            return false;
-        } catch (JwtException ex) {
             return true;
+        } catch (JwtException ex) {
+            return false;
         }
     }
 
