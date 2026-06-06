@@ -41,7 +41,14 @@ export const hydrateAuth = async () => {
     const { setAuth, clearAuth, setLoading } = useAuthStore.getState()
     setLoading(true)
     const storedUser = readUser()
-    if (storedUser) setAuth(storedUser, null)
+    if (!storedUser) {
+      clearAuth()
+      setLoading(false)
+      hydrationPromise = null
+      return
+    }
+
+    setAuth(storedUser, null)
 
     try {
       const { data } = await refreshSession()
