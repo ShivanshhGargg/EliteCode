@@ -16,7 +16,7 @@ public class EmailServiceImpl implements EmailService {
 
     private final JavaMailSender mailSender;
 
-    @Value("${spring.mail.username}")
+    @Value("${spring.mail.username:}")
     private String fromEmail;
 
     @Value("${elitecode.frontend.base-url:http://localhost:5173}")
@@ -28,55 +28,65 @@ public class EmailServiceImpl implements EmailService {
     @Override
     @Async("emailExecutor")
     public void sendVerificationEmail(String to, String token) {
-        String verificationUrl = backendBaseUrl + "/api/auth/verify-email-link?token=" + token;
-        String subject = "Verify your email – EliteCode";
-        String body = String.format("""
-                Hello,
+        try {
+            String verificationUrl = backendBaseUrl + "/api/auth/verify-email-link?token=" + token;
+            String subject = "Verify your email – EliteCode";
+            String body = String.format("""
+                    Hello,
 
-                Thank you for registering with EliteCode.
-                Please click the link below to verify your email address:
+                    Thank you for registering with EliteCode.
+                    Please click the link below to verify your email address:
 
-                %s
+                    %s
 
-                This link will expire in 24 hours.
+                    This link will expire in 24 hours.
 
-                If you did not create an account, please ignore this email.
+                    If you did not create an account, please ignore this email.
 
-                Best regards,
-                The EliteCode Team
-                """, verificationUrl);
+                    Best regards,
+                    The EliteCode Team
+                    """, verificationUrl);
 
-        sendEmail(to, subject, body);
+            sendEmail(to, subject, body);
+        } catch (Exception e) {
+            log.error("Failed to prepare verification email for {}: {}", to, e.getMessage(), e);
+        }
     }
 
     @Override
     @Async("emailExecutor")
     public void sendPasswordResetEmail(String to, String token) {
-        String resetUrl = frontendBaseUrl + "/reset-password?token=" + token;
-        String subject = "Reset your password – EliteCode";
-        String body = String.format("""
-                Hello,
+        try {
+            String resetUrl = frontendBaseUrl + "/reset-password?token=" + token;
+            String subject = "Reset your password – EliteCode";
+            String body = String.format("""
+                    Hello,
 
-                We received a request to reset your password.
-                Use the link below to set a new password:
+                    We received a request to reset your password.
+                    Use the link below to set a new password:
 
-                %s
+                    %s
 
-                This link will expire in 1 hour.
+                    This link will expire in 1 hour.
 
-                If you did not request a password reset, please ignore this email.
+                    If you did not request a password reset, please ignore this email.
 
-                Best regards,
-                The EliteCode Team
-                """, resetUrl);
+                    Best regards,
+                    The EliteCode Team
+                    """, resetUrl);
 
-        sendEmail(to, subject, body);
+            sendEmail(to, subject, body);
+        } catch (Exception e) {
+            log.error("Failed to prepare password reset email for {}: {}", to, e.getMessage(), e);
+        }
     }
 
     private void sendEmail(String to, String subject, String body) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromEmail);
+            if (fromEmail != null && !fromEmail.isBlank()) {
+                message.setFrom(fromEmail);
+            }
             message.setTo(to);
             message.setSubject(subject);
             message.setText(body);
@@ -84,7 +94,6 @@ public class EmailServiceImpl implements EmailService {
             log.info("✅ Email sent to {} with subject '{}'", to, subject);
         } catch (Exception e) {
             log.error("❌ Failed to send email to {}: {}", to, e.getMessage(), e);
-            throw new RuntimeException("Failed to send email", e);
         }
     }
 }
