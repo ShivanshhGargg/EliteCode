@@ -6,7 +6,7 @@ import { hydrateAuth } from './hooks/useAuth'
 import useUIStore from './store/uiStore'
 import useAuthStore from './store/authStore'
 import ErrorBoundary from './components/ErrorBoundary'
-import { Analytics } from "@vercel/analytics/next"
+import { Analytics } from "@vercel/analytics/react"
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import { WorkspacePage } from './pages/WorkspacePage'
@@ -38,9 +38,24 @@ function ProtectedRoute({ children }) {
   return children
 }
 
-function PublicOnlyRoute({ children }) {
-  const { isAuthenticated } = useAuthGate()
+// Optional: role-based protected route
+function AdminRoute({ children }) {
+  const location = useLocation()
+  const { user, isLoading, isAuthenticated } = useAuthGate()
+  // Assuming user object has a 'role' field (e.g., 'admin' | 'user')
+  const isAdmin = user?.role === 'admin'
 
+  if (isLoading) return <Spinner />
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location }} />
+  if (!isAdmin) return <Navigate to="/" replace /> // or a 403 page
+  return children
+}
+
+function PublicOnlyRoute({ children }) {
+  const { isAuthenticated, isLoading } = useAuthGate()
+
+  // ✅ Fix: wait for hydration before deciding redirect
+  if (isLoading) return <Spinner />
   if (isAuthenticated) return <Navigate to="/" replace />
   return children
 }
@@ -63,17 +78,21 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
               <Route path="/register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
+              <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPasswordPage /></PublicOnlyRoute>} />
+              <Route path="/reset-password" element={<PublicOnlyRoute><ResetPasswordPage /></PublicOnlyRoute>} />
+              <Route path="/verify-email" element={<PublicOnlyRoute><VerifyEmailPage /></PublicOnlyRoute>} />
+
               <Route path="/" element={<ProtectedRoute><WorkspacePage /></ProtectedRoute>} />
               <Route path="/attempts" element={<ProtectedRoute><AttemptsPage /></ProtectedRoute>} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
-              <Route path="/verify-email" element={<VerifyEmailPage />} />
               <Route path="/problems" element={<ProtectedRoute><ProblemsPage /></ProtectedRoute>} />
-              <Route path="/admin/problems" element={<ProtectedRoute><AdminProblemsPage /></ProtectedRoute>} />
+
+              <Route path="/admin/problems" element={<AdminRoute><AdminProblemsPage /></AdminRoute>} />
               <Route path="/progress" element={<ProtectedRoute><UserProgressPage /></ProtectedRoute>} />
               <Route path="/account-settings" element={<ProtectedRoute><AccountSettingsPage /></ProtectedRoute>} />
+
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
+            <Analytics />
           </ErrorBoundary>
         </Router>
       </QueryClientProvider>
