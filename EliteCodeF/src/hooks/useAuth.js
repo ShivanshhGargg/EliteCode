@@ -18,6 +18,19 @@ const readUser = () => {
 const getAccessToken = (payload) =>
   payload?.accessToken || payload?.access_token || payload?.token || payload?.data?.accessToken || null
 
+const readAccessToken = () => localStorage.getItem('accessToken')
+
+const isTokenExpired = (token) => {
+  if (!token) return true
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    if (!payload.exp) return false
+    return payload.exp * 1000 <= Date.now() + 30_000
+  } catch {
+    return true
+  }
+}
+
 const getUserFromAuthPayload = (payload, fallbackUser) => {
   const source = payload?.data || payload?.user || payload || {}
   return {
@@ -41,10 +54,27 @@ export const hydrateAuth = async () => {
     const { setAuth, clearAuth, setLoading } = useAuthStore.getState()
     setLoading(true)
     const storedUser = readUser()
+    const storedAccessToken = readAccessToken()
     if (!storedUser) {
       clearAuth()
       setLoading(false)
       hydrationPromise = null
+      return
+    }
+
+    if (storedAccessToken && !isTokenExpired(storedAccessToken)) {
+      setAuth(storedUser, storedAccessToken)
+      setLoading(false)
+      hydrationPromise = null
+      refreshSession()
+        .then(({ data }) => {
+          const newAccessToken = getAccessToken(data)
+          if (!newAccessToken) return
+          const refreshedUser = getUserFromAuthPayload(data, storedUser)
+          setAuth(refreshedUser, newAccessToken)
+          localStorage.setItem('user', JSON.stringify(refreshedUser))
+        })
+        .catch(() => {})
       return
     }
 
