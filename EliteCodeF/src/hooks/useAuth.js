@@ -32,17 +32,10 @@ const getUserFromAuthPayload = (payload, fallbackUser) => {
 export const hydrateAuth = async () => {
   if (hydrationPromise) return hydrationPromise
   hydrationPromise = (async () => {
-    const { setAuth, clearAuth, logout, setLoading } = useAuthStore.getState()
+    const { setAuth, clearAuth, setLoading } = useAuthStore.getState()
     setLoading(true)
     const storedUser = readUser()
-    if (!storedUser) {
-      clearAuth()
-      setLoading(false)
-      hydrationPromise = null
-      return
-    }
-
-    setAuth(storedUser, null)
+    if (storedUser) setAuth(storedUser, null)
 
     try {
       const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true })
@@ -52,11 +45,11 @@ export const hydrateAuth = async () => {
         setAuth(refreshedUser, newAccessToken)
         localStorage.setItem('user', JSON.stringify(refreshedUser))
       } else {
-        logout()
+        clearAuth()
         localStorage.removeItem('user')
       }
     } catch {
-      logout()
+      clearAuth()
       localStorage.removeItem('user')
     } finally {
       setLoading(false)

@@ -117,7 +117,7 @@ public class AuthController {
         String refreshToken = extractRefreshTokenFromCookie(request);
         // call service to revoke
         authService.revokeRefreshToken(refreshToken);
-        String clearCookie = "refresh_token=; Path=/api/auth; Max-Age=0; HttpOnly; Secure; SameSite=Strict";
+        String clearCookie = "refresh_token=; Path=/api/auth; Max-Age=0; HttpOnly; Secure; SameSite=None";
         response.setHeader("Set-Cookie", clearCookie);
         return ResponseEntity.noContent().build();
     }
@@ -183,7 +183,7 @@ public class AuthController {
     private void setRefreshTokenCookie(HttpServletResponse response, String refreshToken) {
         int maxAge = (int) Duration.ofDays(7).toSeconds();
         String cookieValue = String.format(
-                "refresh_token=%s; Path=/api/auth; Max-Age=%d; HttpOnly; Secure; SameSite=Strict",
+                "refresh_token=%s; Path=/api/auth; Max-Age=%d; HttpOnly; Secure; SameSite=None",
                 refreshToken, maxAge
         );
         response.setHeader("Set-Cookie", cookieValue);

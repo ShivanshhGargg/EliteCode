@@ -15,6 +15,17 @@ let refreshSubscribers = []
 const extractAccessToken = (payload) =>
     payload?.accessToken || payload?.access_token || payload?.token || payload?.data?.accessToken || null
 
+const extractUser = (payload, fallbackUser) => {
+  const source = payload?.data || payload?.user || payload || {}
+  return {
+    ...fallbackUser,
+    id: source.userId || source.id || fallbackUser?.id,
+    email: source.email || fallbackUser?.email,
+    firstName: source.firstName ?? fallbackUser?.firstName,
+    lastName: source.lastName ?? fallbackUser?.lastName,
+  }
+}
+
 function onRefreshed(token) {
   refreshSubscribers.forEach((cb) => cb(token))
   refreshSubscribers = []
@@ -57,9 +68,10 @@ axiosClient.interceptors.response.use(
           if (!newAccessToken) {
             throw new Error('Missing access token in refresh response')
           }
-          // Update store and localStorage
           const currentUser = useAuthStore.getState().user
-          useAuthStore.getState().setAuth(currentUser, newAccessToken)
+          const refreshedUser = extractUser(data, currentUser)
+          useAuthStore.getState().setAuth(refreshedUser, newAccessToken)
+          localStorage.setItem('user', JSON.stringify(refreshedUser))
           onRefreshed(newAccessToken)
           original.headers.Authorization = `Bearer ${newAccessToken}`
           return axiosClient(original)
@@ -67,9 +79,10 @@ axiosClient.interceptors.response.use(
           // Refresh failed – force logout
           useAuthStore.getState().logout()
           localStorage.removeItem('user')
-          // Avoid redirect loop: only redirect if not already on login page
-          if (!window.location.pathname.includes('/login')) {
-            window.location.href = '/login'
+          const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email']
+          if (!publicPaths.includes(window.location.pathname)) {
+            window.history.pushState({}, '', '/login')
+            window.dispatchEvent(new PopStateEvent('popstate'))
           }
           return Promise.reject(refreshError)
         } finally {
