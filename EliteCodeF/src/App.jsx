@@ -6,7 +6,7 @@ import { hydrateAuth } from './hooks/useAuth'
 import useUIStore from './store/uiStore'
 import useAuthStore from './store/authStore'
 import ErrorBoundary from './components/ErrorBoundary'
-
+import { Analytics } from "@vercel/analytics/next"
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import { WorkspacePage } from './pages/WorkspacePage'
