@@ -7,6 +7,7 @@ import useUIStore from './store/uiStore'
 import useAuthStore from './store/authStore'
 import ErrorBoundary from './components/ErrorBoundary'
 import { Analytics } from "@vercel/analytics/react"
+import { SpeedInsights } from "@vercel/speed-insights/react"  // ✅ correct package for React
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import { WorkspacePage } from './pages/WorkspacePage'
@@ -24,6 +25,7 @@ import { Spinner } from './components/Spinner'
 function useAuthGate() {
   const { user, accessToken, isLoading } = useAuthStore()
   return {
+    user,  // ✅ must return user for role checks
     isAuthenticated: Boolean(user && accessToken),
     isLoading,
   }
@@ -38,23 +40,20 @@ function ProtectedRoute({ children }) {
   return children
 }
 
-// Optional: role-based protected route
 function AdminRoute({ children }) {
   const location = useLocation()
-  const { user, isLoading, isAuthenticated } = useAuthGate()
-  // Assuming user object has a 'role' field (e.g., 'admin' | 'user')
+  const { user, isAuthenticated, isLoading } = useAuthGate()
   const isAdmin = user?.role === 'admin'
 
   if (isLoading) return <Spinner />
   if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location }} />
-  if (!isAdmin) return <Navigate to="/" replace /> // or a 403 page
+  if (!isAdmin) return <Navigate to="/" replace />
   return children
 }
 
 function PublicOnlyRoute({ children }) {
   const { isAuthenticated, isLoading } = useAuthGate()
 
-  // ✅ Fix: wait for hydration before deciding redirect
   if (isLoading) return <Spinner />
   if (isAuthenticated) return <Navigate to="/" replace />
   return children
@@ -93,6 +92,7 @@ export default function App() {
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
             <Analytics />
+            <SpeedInsights />
           </ErrorBoundary>
         </Router>
       </QueryClientProvider>
