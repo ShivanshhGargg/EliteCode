@@ -6,7 +6,6 @@ import { hydrateAuth } from './hooks/useAuth'
 import useUIStore from './store/uiStore'
 import useAuthStore from './store/authStore'
 import ErrorBoundary from './components/ErrorBoundary'
-import axiosClient from './api/axiosClient'
 
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -40,9 +39,8 @@ function ProtectedRoute({ children }) {
 }
 
 function PublicOnlyRoute({ children }) {
-  const { isAuthenticated, isLoading } = useAuthGate()
+  const { isAuthenticated } = useAuthGate()
 
-  if (isLoading) return <Spinner />
   if (isAuthenticated) return <Navigate to="/" replace />
   return children
 }
@@ -57,10 +55,6 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
-
-  useEffect(() => {
-    axiosClient.get('/public/ping').catch(() => console.warn('Backend unreachable'))
-  }, [])
 
   return (
       <QueryClientProvider client={queryClient}>

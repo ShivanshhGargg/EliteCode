@@ -29,6 +29,12 @@ const getUserFromAuthPayload = (payload, fallbackUser) => {
   }
 }
 
+const refreshSession = () =>
+  Promise.race([
+    axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Refresh timed out')), 8000)),
+  ])
+
 export const hydrateAuth = async () => {
   if (hydrationPromise) return hydrationPromise
   hydrationPromise = (async () => {
@@ -38,7 +44,7 @@ export const hydrateAuth = async () => {
     if (storedUser) setAuth(storedUser, null)
 
     try {
-      const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true })
+      const { data } = await refreshSession()
       const newAccessToken = getAccessToken(data)
       if (newAccessToken) {
         const refreshedUser = getUserFromAuthPayload(data, storedUser)
