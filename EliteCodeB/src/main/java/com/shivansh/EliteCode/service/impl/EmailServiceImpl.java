@@ -22,10 +22,13 @@ public class EmailServiceImpl implements EmailService {
     @Value("${elitecode.frontend.base-url:http://localhost:5173}")
     private String frontendBaseUrl;
 
+    @Value("${elitecode.app.base-url:http://localhost:8080}")
+    private String backendBaseUrl;
+
     @Override
     @Async("emailExecutor")
     public void sendVerificationEmail(String to, String token) {
-        String verificationUrl = frontendBaseUrl + "/verify-email?token=" + token;
+        String verificationUrl = backendBaseUrl + "/api/auth/verify-email-link?token=" + token;
         String subject = "Verify your email – EliteCode";
         String body = String.format("""
                 Hello,

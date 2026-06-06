@@ -14,6 +14,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +29,9 @@ import java.util.Arrays;
 public class AuthController {
 
     private final AuthService authService;
+
+    @Value("${elitecode.frontend.base-url:http://localhost:5173}")
+    private String frontendBaseUrl;
 
     @PostMapping("/login")
     @Operation(summary = "Login with email and password")
@@ -51,6 +56,21 @@ public class AuthController {
     public ResponseEntity<Void> verifyEmail(@RequestParam("token") String token) {
         authService.verifyEmail(token);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/verify-email-link")
+    @Operation(summary = "Verify email from a link and redirect to the app")
+    @ApiResponse(responseCode = "302", description = "Redirects to frontend verification result")
+    public ResponseEntity<Void> verifyEmailLink(@RequestParam("token") String token) {
+        String redirectPath = "/verify-email?status=success";
+        try {
+            authService.verifyEmail(token);
+        } catch (RuntimeException ex) {
+            redirectPath = "/verify-email?status=error&message=" + urlEncode(ex.getMessage());
+        }
+        return ResponseEntity.status(302)
+                .header(HttpHeaders.LOCATION, frontendBaseUrl + redirectPath)
+                .build();
     }
 
     @PostMapping("/resend-verification")
@@ -178,6 +198,10 @@ public class AuthController {
                     .orElseThrow(() -> new CustomExceptions.BadRequestException("Refresh token missing"));
         }
         throw new CustomExceptions.BadRequestException("Refresh token missing");
+    }
+
+    private String urlEncode(String value) {
+        return java.net.URLEncoder.encode(value == null ? "Verification failed" : value, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     @PostMapping("/change-password")

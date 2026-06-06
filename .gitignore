@@ -1,0 +1,64 @@
+# =========================
+# Maven / Spring Boot
+# =========================
+target/
+*.jar
+*.war
+*.class
+.mvn/
+mvnw
+mvnw.cmd
+src/main/resources/application.properties
+# =========================
+# Node / Frontend (React / Vite / Next)
+# =========================
+node_modules/
+dist/
+build/
+out/
+coverage/
+
+# =========================
+# Environment / secrets (VERY IMPORTANT)
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# IDEs
+# =========================
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+
+# =========================
+# Spring Tool Suite / Eclipse
+# =========================
+.apt_generated/
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans/
+.sts4-cache/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+
+# =========================
+# Optional: coverage reports
+# =========================
+coverage/
+*.lcov
