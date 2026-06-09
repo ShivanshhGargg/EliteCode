@@ -1,40 +1,33 @@
 package com.shivansh.EliteCode.service.impl;
 
-import com.shivansh.EliteCode.service.EmailService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
+import com.shivansh.EliteCode.service.EmailService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class EmailServiceImpl implements EmailService {
 
-    private final JavaMailSender mailSender;
+    private final RestClient restClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    @Value("${spring.mail.username:}")
+    @Value("${brevo.api.key}")
+    private String apiKey;
+
+    @Value("${brevo.from.email}")
     private String fromEmail;
 
-    @Value("${resend.api-key:}")
-    private String resendApiKey;
-
-    @Value("${resend.from-email:}")
-    private String resendFromEmail;
+    @Value("${brevo.from.name}")
+    private String fromName;
 
     @Value("${elitecode.frontend.base-url:http://localhost:5173}")
     private String frontendBaseUrl;
@@ -42,121 +35,75 @@ public class EmailServiceImpl implements EmailService {
     @Value("${elitecode.app.base-url:http://localhost:8080}")
     private String backendBaseUrl;
 
+    public EmailServiceImpl() {
+        this.restClient = RestClient.builder()
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build();
+    }
+
     @Override
     @Async("emailExecutor")
     public void sendVerificationEmail(String to, String token) {
-        try {
-            String verificationUrl = backendBaseUrl + "/api/auth/verify-email-link?token=" + token;
-            String subject = "Verify your email – EliteCode";
-            String body = String.format("""
-                    Hello,
-
-                    Thank you for registering with EliteCode.
-                    Please click the link below to verify your email address:
-
-                    %s
-
-                    This link will expire in 24 hours.
-
-                    If you did not create an account, please ignore this email.
-
-                    Best regards,
-                    The EliteCode Team
-                    """, verificationUrl);
-
-            sendEmail(to, subject, body);
-        } catch (Exception e) {
-            log.error("Failed to prepare verification email for {}: {}", to, e.getMessage(), e);
-        }
+        String verificationUrl = backendBaseUrl + "/api/auth/verify-email-link?token=" + token;
+        String subject = "Verify your email – EliteCode";
+        String htmlContent = String.format("""
+                <html>
+                <body>
+                    <h2>Welcome to EliteCode!</h2>
+                    <p>Thank you for registering. Please click the link below to verify your email address:</p>
+                    <a href="%s">Verify Email</a>
+                    <p>This link will expire in 24 hours.</p>
+                    <p>If you did not create an account, please ignore this email.</p>
+                    <br>
+                    <p>Best regards,<br>The EliteCode Team</p>
+                </body>
+                </html>
+                """, verificationUrl);
+        sendEmail(to, subject, htmlContent);
     }
 
     @Override
     @Async("emailExecutor")
     public void sendPasswordResetEmail(String to, String token) {
-        try {
-            String resetUrl = frontendBaseUrl + "/reset-password?token=" + token;
-            String subject = "Reset your password – EliteCode";
-            String body = String.format("""
-                    Hello,
-
-                    We received a request to reset your password.
-                    Use the link below to set a new password:
-
-                    %s
-
-                    This link will expire in 1 hour.
-
-                    If you did not request a password reset, please ignore this email.
-
-                    Best regards,
-                    The EliteCode Team
-                    """, resetUrl);
-
-            sendEmail(to, subject, body);
-        } catch (Exception e) {
-            log.error("Failed to prepare password reset email for {}: {}", to, e.getMessage(), e);
-        }
+        String resetUrl = frontendBaseUrl + "/reset-password?token=" + token;
+        String subject = "Reset your password – EliteCode";
+        String htmlContent = String.format("""
+                <html>
+                <body>
+                    <h2>Reset Your Password</h2>
+                    <p>We received a request to reset your password. Click the link below to choose a new one:</p>
+                    <a href="%s">Reset Password</a>
+                    <p>This link will expire in 1 hour.</p>
+                    <p>If you did not request this, please ignore this email.</p>
+                    <br>
+                    <p>Best regards,<br>The EliteCode Team</p>
+                </body>
+                </html>
+                """, resetUrl);
+        sendEmail(to, subject, htmlContent);
     }
 
-    private void sendEmail(String to, String subject, String body) {
-        if (resendApiKey != null && !resendApiKey.isBlank()) {
-            sendEmailWithResend(to, subject, body);
-            return;
-        }
-
-        sendEmailWithSmtp(to, subject, body);
-    }
-
-    private void sendEmailWithSmtp(String to, String subject, String body) {
+    private void sendEmail(String to, String subject, String htmlContent) {
         try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            if (fromEmail != null && !fromEmail.isBlank()) {
-                message.setFrom(fromEmail);
-            }
-            message.setTo(to);
-            message.setSubject(subject);
-            message.setText(body);
-            mailSender.send(message);
-            log.info("✅ SMTP email sent to {} with subject '{}'", to, subject);
-        } catch (Exception e) {
-            log.error("❌ Failed to send SMTP email to {}: {}", to, e.getMessage(), e);
-        }
-    }
-
-    private void sendEmailWithResend(String to, String subject, String body) {
-        try {
-            String from = (resendFromEmail != null && !resendFromEmail.isBlank())
-                    ? resendFromEmail
-                    : fromEmail;
-            if (from == null || from.isBlank()) {
-                log.error("❌ Resend email not sent to {}: sender email is missing", to);
-                return;
-            }
-
-            String payload = objectMapper.writeValueAsString(Map.of(
-                    "from", from,
-                    "to", List.of(to),
+            // Build the request payload as a Map (ObjectMapper is optional here)
+            Map<String, Object> payload = Map.of(
+                    "sender", Map.of("name", fromName, "email", fromEmail),
+                    "to", List.of(Map.of("email", to)),
                     "subject", subject,
-                    "text", body
-            ));
+                    "htmlContent", htmlContent
+            );
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.resend.com/emails"))
-                    .timeout(Duration.ofSeconds(15))
-                    .header("Authorization", "Bearer " + resendApiKey)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(payload))
-                    .build();
+            // Send the request
+            restClient.post()
+                    .uri("https://api.brevo.com/v3/smtp/email")
+                    .header("api-key", apiKey)
+                    .body(objectMapper.writeValueAsString(payload))
+                    .retrieve()
+                    .toBodilessEntity();
 
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                log.info("✅ Resend email sent to {} with subject '{}'", to, subject);
-                return;
-            }
-
-            log.error("❌ Resend email failed for {} with status {}: {}", to, response.statusCode(), response.body());
+            log.info("✅ Email sent successfully via Brevo API to: {}", to);
         } catch (Exception e) {
-            log.error("❌ Failed to send Resend email to {}: {}", to, e.getMessage(), e);
+            log.error("❌ Failed to send email to {}: {}", to, e.getMessage(), e);
         }
     }
 }

@@ -10,10 +10,10 @@ import com.shivansh.EliteCode.model.Language;
 import com.shivansh.EliteCode.model.Problem;
 import com.shivansh.EliteCode.repository.AttemptRepository;
 import com.shivansh.EliteCode.service.EvaluationService;
-import com.shivansh.EliteCode.service.ProgressService;
 import com.shivansh.EliteCode.service.FeedbackService;
-import lombok.RequiredArgsConstructor;
+import com.shivansh.EliteCode.service.ProgressService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.scheduling.annotation.Async;
@@ -28,7 +28,6 @@ import java.util.concurrent.CompletableFuture;
 
 @Service
 @Transactional
-@RequiredArgsConstructor
 @Slf4j
 public class EvaluationServiceImpl implements EvaluationService {
 
@@ -36,7 +35,22 @@ public class EvaluationServiceImpl implements EvaluationService {
     private final ProgressService progressService;
     private final FeedbackService feedbackService;
     private final AttemptMapper attemptMapper;
-    private final CodeExecutor codeExecutor;
+    private final CodeExecutor primaryExecutor;
+    private final CodeExecutor fallbackExecutor;
+
+    public EvaluationServiceImpl(AttemptRepository attemptRepository,
+                                  ProgressService progressService,
+                                  FeedbackService feedbackService,
+                                  AttemptMapper attemptMapper,
+                                  @Qualifier("wandboxCodeExecutor") CodeExecutor primaryExecutor,
+                                  @Qualifier("dockerCodeExecutorFallback") CodeExecutor fallbackExecutor) {
+        this.attemptRepository = attemptRepository;
+        this.progressService = progressService;
+        this.feedbackService = feedbackService;
+        this.attemptMapper = attemptMapper;
+        this.primaryExecutor = primaryExecutor;
+        this.fallbackExecutor = fallbackExecutor;
+    }
 
     @Async("evaluationExecutor")
     @Retryable(retryFor = {RuntimeException.class}, backoff = @Backoff(delay = 1000))
@@ -78,7 +92,7 @@ public class EvaluationServiceImpl implements EvaluationService {
 
                 log.info("Running test case {}: input='{}', expected='{}'", i + 1, input, expected);
 
-                ExecutionResult execResult = codeExecutor.execute(
+                ExecutionResult execResult = executeWithFallback(
                         attempt.getCode(),
                         input,
                         language,
@@ -128,13 +142,34 @@ public class EvaluationServiceImpl implements EvaluationService {
 
             return CompletableFuture.completedFuture(attemptMapper.toResponse(attempt));
 
-        } catch (Exception ex) {  // <-- THIS IS THE CRITICAL FIX
+        } catch (Exception ex) {
             log.error("!!! FATAL ERROR in async evaluation for attempt {} !!!", attemptId, ex);
             attempt.setStatus(Attempt.AttemptStatus.FAILED);
             attempt.setResult(Attempt.AttemptResult.RUNTIME_ERROR);
             attempt.setExecutionTime(0.0);
             attemptRepository.save(attempt);
             return CompletableFuture.completedFuture(attemptMapper.toResponse(attempt));
+        }
+    }
+
+    private ExecutionResult executeWithFallback(String code, String input, Language language, long timeoutSeconds) {
+        try {
+            log.info("Attempting execution with Wandbox executor");
+            ExecutionResult result = primaryExecutor.execute(code, input, language, timeoutSeconds);
+
+            if (result.success() || (result.error() == null) || result.timeout()) {
+                log.info("Wandbox execution successful");
+                return result;
+            }
+
+            log.warn("Wandbox execution failed: {}. Falling back to Docker executor.", result.error());
+            ExecutionResult fallbackResult = fallbackExecutor.execute(code, input, language, timeoutSeconds);
+            log.info("Docker fallback execution result: success={}", fallbackResult.success());
+            return fallbackResult;
+
+        } catch (Exception e) {
+            log.error("Exception in primary executor, falling back to Docker: {}", e.getMessage(), e);
+            return fallbackExecutor.execute(code, input, language, timeoutSeconds);
         }
     }
 }

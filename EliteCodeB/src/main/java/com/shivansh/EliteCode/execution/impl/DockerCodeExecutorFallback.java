@@ -15,7 +15,6 @@ import com.shivansh.EliteCode.execution.ExecutionResult;
 import com.shivansh.EliteCode.model.Language;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -25,9 +24,9 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-@Service
+@Service("dockerCodeExecutorFallback")
 @Slf4j
-public class DockerCodeExecutor implements CodeExecutor {
+public class DockerCodeExecutorFallback implements CodeExecutor {
 
     private volatile DockerClient dockerClient;
     private static final int MAX_RETRIES = 3;

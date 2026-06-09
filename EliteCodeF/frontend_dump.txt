@@ -99,6 +99,19 @@ export default {
 
 
 ==================================================
+FILE: ./vercel.json
+==================================================
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+
+
+==================================================
 FILE: ./vite.config.js
 ==================================================
 import { defineConfig } from 'vite'
@@ -128,6 +141,8 @@ FILE: ./package.json
     "@monaco-editor/react": "^4.6.0",
     "@react-oauth/google": "^0.13.5",
     "@tanstack/react-query": "^5.0.0",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "axios": "^1.6.0",
     "framer-motion": "^11.0.0",
     "lucide-react": "^0.400.0",
@@ -3016,6 +3031,19 @@ const readUser = () => {
 const getAccessToken = (payload) =>
   payload?.accessToken || payload?.access_token || payload?.token || payload?.data?.accessToken || null
 
+const readAccessToken = () => localStorage.getItem('accessToken')
+
+const isTokenExpired = (token) => {
+  if (!token) return true
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    if (!payload.exp) return false
+    return payload.exp * 1000 <= Date.now() + 30_000
+  } catch {
+    return true
+  }
+}
+
 const getUserFromAuthPayload = (payload, fallbackUser) => {
   const source = payload?.data || payload?.user || payload || {}
   return {
@@ -3027,12 +3055,19 @@ const getUserFromAuthPayload = (payload, fallbackUser) => {
   }
 }
 
+const refreshSession = () =>
+  Promise.race([
+    axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Refresh timed out')), 8000)),
+  ])
+
 export const hydrateAuth = async () => {
   if (hydrationPromise) return hydrationPromise
   hydrationPromise = (async () => {
-    const { setAuth, clearAuth, logout, setLoading } = useAuthStore.getState()
+    const { setAuth, clearAuth, setLoading } = useAuthStore.getState()
     setLoading(true)
     const storedUser = readUser()
+    const storedAccessToken = readAccessToken()
     if (!storedUser) {
       clearAuth()
       setLoading(false)
@@ -3040,21 +3075,37 @@ export const hydrateAuth = async () => {
       return
     }
 
+    if (storedAccessToken && !isTokenExpired(storedAccessToken)) {
+      setAuth(storedUser, storedAccessToken)
+      setLoading(false)
+      hydrationPromise = null
+      refreshSession()
+        .then(({ data }) => {
+          const newAccessToken = getAccessToken(data)
+          if (!newAccessToken) return
+          const refreshedUser = getUserFromAuthPayload(data, storedUser)
+          setAuth(refreshedUser, newAccessToken)
+          localStorage.setItem('user', JSON.stringify(refreshedUser))
+        })
+        .catch(() => {})
+      return
+    }
+
     setAuth(storedUser, null)
 
     try {
-      const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true })
+      const { data } = await refreshSession()
       const newAccessToken = getAccessToken(data)
       if (newAccessToken) {
         const refreshedUser = getUserFromAuthPayload(data, storedUser)
         setAuth(refreshedUser, newAccessToken)
         localStorage.setItem('user', JSON.stringify(refreshedUser))
       } else {
-        logout()
+        clearAuth()
         localStorage.removeItem('user')
       }
     } catch {
-      logout()
+      clearAuth()
       localStorage.removeItem('user')
     } finally {
       setLoading(false)
@@ -3158,14 +3209,15 @@ ReactDOM.createRoot(document.getElementById('root')).render(
 FILE: ./src/App.jsx
 ==================================================
 import { useEffect } from 'react'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './api/queryClient'
 import { hydrateAuth } from './hooks/useAuth'
 import useUIStore from './store/uiStore'
+import useAuthStore from './store/authStore'
 import ErrorBoundary from './components/ErrorBoundary'
-import axiosClient from './api/axiosClient'
-
+import { Analytics } from "@vercel/analytics/react"
+import { SpeedInsights } from "@vercel/speed-insights/react"  // ✅ correct package for React
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import { WorkspacePage } from './pages/WorkspacePage'
@@ -3178,6 +3230,44 @@ import { AdminProblemsPage } from './pages/AdminProblemsPage'
 import { UserProgressPage } from './pages/UserProgressPage'
 import { AccountSettingsPage } from './pages/AccountSettingsPage'
 import { VerifyEmailPage } from './pages/VerifyEmailPage'
+import { Spinner } from './components/Spinner'
+
+function useAuthGate() {
+  const { user, accessToken, isLoading } = useAuthStore()
+  return {
+    user,  // ✅ must return user for role checks
+    isAuthenticated: Boolean(user && accessToken),
+    isLoading,
+  }
+}
+
+function ProtectedRoute({ children }) {
+  const location = useLocation()
+  const { isAuthenticated, isLoading } = useAuthGate()
+
+  if (isLoading) return <Spinner />
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location }} />
+  return children
+}
+
+function AdminRoute({ children }) {
+  const location = useLocation()
+  const { user, isAuthenticated, isLoading } = useAuthGate()
+  const isAdmin = user?.role === 'admin'
+
+  if (isLoading) return <Spinner />
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location }} />
+  if (!isAdmin) return <Navigate to="/" replace />
+  return children
+}
+
+function PublicOnlyRoute({ children }) {
+  const { isAuthenticated, isLoading } = useAuthGate()
+
+  if (isLoading) return <Spinner />
+  if (isAuthenticated) return <Navigate to="/" replace />
+  return children
+}
 
 export default function App() {
   const theme = useUIStore((state) => state.theme)
@@ -3190,34 +3280,34 @@ export default function App() {
     document.documentElement.dataset.theme = theme
   }, [theme])
 
-  useEffect(() => {
-    axiosClient.get('/public/ping').catch(() => console.warn('Backend unreachable'))
-  }, [])
-
   return (
       <QueryClientProvider client={queryClient}>
         <Router>
           <ErrorBoundary>
             <Routes>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/" element={<WorkspacePage />} />
-              <Route path="/attempts" element={<AttemptsPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
-              <Route path="/verify-email" element={<VerifyEmailPage />} />
-              <Route path="/problems" element={<ProblemsPage />} />
-              <Route path="/admin/problems" element={<AdminProblemsPage />} />
-              <Route path="/progress" element={<UserProgressPage />} />
-              <Route path="/account-settings" element={<AccountSettingsPage />} />
+              <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
+              <Route path="/register" element={<PublicOnlyRoute><RegisterPage /></PublicOnlyRoute>} />
+              <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPasswordPage /></PublicOnlyRoute>} />
+              <Route path="/reset-password" element={<PublicOnlyRoute><ResetPasswordPage /></PublicOnlyRoute>} />
+              <Route path="/verify-email" element={<PublicOnlyRoute><VerifyEmailPage /></PublicOnlyRoute>} />
+
+              <Route path="/" element={<ProtectedRoute><WorkspacePage /></ProtectedRoute>} />
+              <Route path="/attempts" element={<ProtectedRoute><AttemptsPage /></ProtectedRoute>} />
+              <Route path="/problems" element={<ProtectedRoute><ProblemsPage /></ProtectedRoute>} />
+
+              <Route path="/admin/problems" element={<AdminRoute><AdminProblemsPage /></AdminRoute>} />
+              <Route path="/progress" element={<ProtectedRoute><UserProgressPage /></ProtectedRoute>} />
+              <Route path="/account-settings" element={<ProtectedRoute><AccountSettingsPage /></ProtectedRoute>} />
+
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
+            <Analytics />
+            <SpeedInsights />
           </ErrorBoundary>
         </Router>
       </QueryClientProvider>
   )
 }
-
 
 ==================================================
 FILE: ./src/api/userService.js
@@ -3332,6 +3422,17 @@ let refreshSubscribers = []
 const extractAccessToken = (payload) =>
     payload?.accessToken || payload?.access_token || payload?.token || payload?.data?.accessToken || null
 
+const extractUser = (payload, fallbackUser) => {
+  const source = payload?.data || payload?.user || payload || {}
+  return {
+    ...fallbackUser,
+    id: source.userId || source.id || fallbackUser?.id,
+    email: source.email || fallbackUser?.email,
+    firstName: source.firstName ?? fallbackUser?.firstName,
+    lastName: source.lastName ?? fallbackUser?.lastName,
+  }
+}
+
 function onRefreshed(token) {
   refreshSubscribers.forEach((cb) => cb(token))
   refreshSubscribers = []
@@ -3374,9 +3475,10 @@ axiosClient.interceptors.response.use(
           if (!newAccessToken) {
             throw new Error('Missing access token in refresh response')
           }
-          // Update store and localStorage
           const currentUser = useAuthStore.getState().user
-          useAuthStore.getState().setAuth(currentUser, newAccessToken)
+          const refreshedUser = extractUser(data, currentUser)
+          useAuthStore.getState().setAuth(refreshedUser, newAccessToken)
+          localStorage.setItem('user', JSON.stringify(refreshedUser))
           onRefreshed(newAccessToken)
           original.headers.Authorization = `Bearer ${newAccessToken}`
           return axiosClient(original)
@@ -3384,9 +3486,10 @@ axiosClient.interceptors.response.use(
           // Refresh failed – force logout
           useAuthStore.getState().logout()
           localStorage.removeItem('user')
-          // Avoid redirect loop: only redirect if not already on login page
-          if (!window.location.pathname.includes('/login')) {
-            window.location.href = '/login'
+          const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email']
+          if (!publicPaths.includes(window.location.pathname)) {
+            window.history.pushState({}, '', '/login')
+            window.dispatchEvent(new PopStateEvent('popstate'))
           }
           return Promise.reject(refreshError)
         } finally {
@@ -3398,6 +3501,7 @@ axiosClient.interceptors.response.use(
 )
 
 export default axiosClient
+
 
 ==================================================
 FILE: ./src/api/authService.js
@@ -5628,7 +5732,7 @@ import { create } from 'zustand'
 const useAuthStore = create((set) => ({
   user: null,
   accessToken: localStorage.getItem('accessToken') || null,
-  isLoading: false,
+  isLoading: true,
   error: null,
   setAuth: (user, accessToken) => {
     if (accessToken) localStorage.setItem('accessToken', accessToken);

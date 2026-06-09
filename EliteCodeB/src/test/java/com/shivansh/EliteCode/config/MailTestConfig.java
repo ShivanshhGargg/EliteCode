@@ -1,58 +1,28 @@
 package com.shivansh.EliteCode.config;
 
-import jakarta.mail.Session;
-import jakarta.mail.internet.MimeMessage;
-import java.io.InputStream;
-import java.util.Properties;
-
-import org.jspecify.annotations.NonNull;
+import com.shivansh.EliteCode.service.EmailService;
+import com.shivansh.EliteCode.service.impl.EmailServiceImpl;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
-import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.context.annotation.Primary;
 
 @TestConfiguration
 public class MailTestConfig {
 
     @Bean
-    public JavaMailSender javaMailSender() {
-        return new JavaMailSender() {
+    @Primary
+    public EmailService emailService() {
+        // For tests, you can return a mock that doesn't call the real API
+        return new EmailService() {
             @Override
-            public @NonNull MimeMessage createMimeMessage() {
-                return new MimeMessage(Session.getDefaultInstance(new Properties()));
+            public void sendVerificationEmail(String to, String token) {
+                // No-op for tests
             }
 
             @Override
-            public @NonNull MimeMessage createMimeMessage(@NonNull InputStream contentStream) {
-                try {
-                    return new MimeMessage(Session.getDefaultInstance(new Properties()), contentStream);
-                } catch (Exception ex) {
-                    throw new MailException("Failed to create test MimeMessage", ex) {
-                    };
-                }
-            }
-
-            @Override
-            public void send(@NonNull MimeMessage mimeMessage) {
-                // No-op for tests.
-            }
-
-            @Override
-            public void send(MimeMessage @NonNull ... mimeMessages) {
-                // No-op for tests.
-            }
-
-            @Override
-            public void send(@NonNull SimpleMailMessage simpleMessage) {
-                // No-op for tests.
-            }
-
-            @Override
-            public void send(SimpleMailMessage @NonNull ... simpleMessages) {
-                // No-op for tests.
+            public void sendPasswordResetEmail(String to, String token) {
+                // No-op for tests
             }
         };
     }
 }
-
