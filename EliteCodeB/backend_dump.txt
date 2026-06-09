@@ -487,6 +487,74 @@ package com.shivansh.EliteCode.dto.response.ai;
 public record SessionTitleResponse(String title) {
 }
 
+----- ./src/main/java/com/shivansh/EliteCode/dto/leetcode/LeetCodeGraphQLResponse.java -----
+package com.shivansh.EliteCode.dto.leetcode;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Data;
+import java.util.List;
+
+@Data
+public class LeetCodeGraphQLResponse {
+    private Data data;
+
+    @lombok.Data
+    public static class Data {
+        @JsonProperty("problemsetQuestionList")
+        private ProblemSetQuestionList problemsetQuestionList;
+    }
+
+    @lombok.Data
+    public static class ProblemSetQuestionList {
+        @JsonProperty("totalNum")
+        private int total;          // total number of problems
+        private List<Question> questions;
+    }
+
+    @lombok.Data
+    public static class Question {
+        private String title;
+        @JsonProperty("topicTags")
+        private List<TopicTag> topicTags;
+    }
+
+    @lombok.Data
+    public static class TopicTag {
+        private String name;
+    }
+}
+----- ./src/main/java/com/shivansh/EliteCode/dto/request/chat/CreateSessionRequest.java -----
+package com.shivansh.EliteCode.dto.request.chat;
+
+import com.shivansh.EliteCode.model.Mode;
+import jakarta.validation.constraints.NotNull;
+import java.util.UUID;
+
+public record CreateSessionRequest(
+        @NotNull Mode mode,
+        UUID problemId,
+        String title
+) {}
+----- ./src/main/java/com/shivansh/EliteCode/dto/request/chat/AddMessageRequest.java -----
+package com.shivansh.EliteCode.dto.request.chat;
+
+import jakarta.validation.constraints.NotBlank;
+import java.util.List;
+import java.util.Map;
+
+public record AddMessageRequest(
+        @NotBlank String role,
+        @NotBlank String content,
+        List<Map<String, Object>> problemSuggestions
+) {}
+----- ./src/main/java/com/shivansh/EliteCode/dto/request/chat/TitleRequest.java -----
+package com.shivansh.EliteCode.dto.request.chat;
+
+import jakarta.validation.constraints.NotBlank;
+
+public record TitleRequest(
+        @NotBlank String title
+) {}
 ----- ./src/main/java/com/shivansh/EliteCode/dto/request/auth/ChangePasswordRequest.java -----
 package com.shivansh.EliteCode.dto.request.auth;
 
@@ -817,6 +885,19 @@ public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
     Optional<Attempt> findByIdAndUserId(UUID id, UUID userId);
 }
 
+----- ./src/main/java/com/shivansh/EliteCode/repository/ChatSessionRepository.java -----
+package com.shivansh.EliteCode.repository;
+
+import com.google.common.base.Optional;
+import com.shivansh.EliteCode.model.ChatSession;
+import org.hibernate.validator.constraints.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface ChatSessionRepository extends JpaRepository<ChatSession, UUID> {
+    List<ChatSession> findByUserIdOrderByUpdatedAtDesc(UUID userId);
+    Optional<ChatSession> findByIdAndUserId(UUID id, UUID userId);
+}
 ----- ./src/main/java/com/shivansh/EliteCode/repository/AccountRepository.java -----
 package com.shivansh.EliteCode.repository;
 
@@ -893,6 +974,19 @@ public interface FeedbackRepository extends JpaRepository<Feedback, UUID> {
     // One-to-one with Attempt -> unique attempt_id, so Optional
     Optional<Feedback> findByAttemptId(UUID attemptId);
 }
+----- ./src/main/java/com/shivansh/EliteCode/repository/ChatMessageRepository.java -----
+package com.shivansh.EliteCode.repository;
+
+import com.shivansh.EliteCode.model.ChatMessage;
+import org.hibernate.validator.constraints.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> {
+    List<ChatMessage> findBySessionIdOrderByTimestampAsc(UUID sessionId);
+}
+
 ----- ./src/main/java/com/shivansh/EliteCode/util/AiPromptBuilder.java -----
 package com.shivansh.EliteCode.util;
 
@@ -1435,6 +1529,93 @@ public class AiConfig {
                 .defaultHeader("HTTP-Referer", "http://localhost:8080") // optional, your app URL
                 .defaultHeader("X-Title", "EliteCode")               // optional
                 .build();
+    }
+}
+----- ./src/main/java/com/shivansh/EliteCode/config/TagPopulatorRunner.java -----
+package com.shivansh.EliteCode.config;
+
+import com.shivansh.EliteCode.dto.leetcode.LeetCodeGraphQLResponse;
+import com.shivansh.EliteCode.model.Problem;
+import com.shivansh.EliteCode.repository.ProblemRepository;
+import com.shivansh.EliteCode.service.LeetCodeTagService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Component
+@Profile("fetch-tags")
+@RequiredArgsConstructor
+@Slf4j
+public class TagPopulatorRunner implements CommandLineRunner {
+
+    private final LeetCodeTagService tagService;
+    private final ProblemRepository problemRepository;
+    private final JdbcTemplate jdbcTemplate;
+
+    @Override
+    @Transactional
+    public void run(String... args) {
+        log.info("=== Starting tag population from LeetCode ===");
+
+        // 1. Fetch all problems with tags from LeetCode (paginated)
+        List<LeetCodeGraphQLResponse.Question> questions = tagService.fetchAllProblemsWithTags();
+        if (questions.isEmpty()) {
+            log.error("No questions fetched from LeetCode. Aborting.");
+            return;
+        }
+
+        Map<String, List<String>> titleToTags = new HashMap<>();
+        for (var q : questions) {
+            List<String> tags = q.getTopicTags().stream()
+                    .map(LeetCodeGraphQLResponse.TopicTag::getName)
+                    .collect(Collectors.toList());
+            titleToTags.put(q.getTitle(), tags);
+        }
+        log.info("Fetched {} problem titles with tags from LeetCode.", titleToTags.size());
+
+        // 2. Load all problems from your database
+        List<Problem> dbProblems = problemRepository.findAll();
+        log.info("Found {} problems in database.", dbProblems.size());
+
+        // 3. Clear existing tags (optional – comment out if you want to keep old ones)
+        jdbcTemplate.execute("TRUNCATE TABLE problem_tags");
+        log.info("Cleared existing problem_tags.");
+
+        // 4. Insert new tags using batch JDBC
+        int matched = 0;
+        int totalTags = 0;
+        List<Object[]> batchArgs = new ArrayList<>();
+
+        for (Problem problem : dbProblems) {
+            String title = problem.getTitle();
+            List<String> tags = titleToTags.get(title);
+            if (tags != null && !tags.isEmpty()) {
+                matched++;
+                for (String tag : tags) {
+                    batchArgs.add(new Object[]{problem.getId(), tag});
+                    totalTags++;
+                }
+            } else {
+                log.debug("No tags found for problem: {}", title);
+            }
+        }
+
+        // Batch insert
+        if (!batchArgs.isEmpty()) {
+            jdbcTemplate.batchUpdate(
+                    "INSERT INTO problem_tags (problem_id, tag) VALUES (?, ?)",
+                    batchArgs
+            );
+        }
+
+        log.info("Tag population completed. Matched {} problems, inserted {} tag rows.", matched, totalTags);
     }
 }
 ----- ./src/main/java/com/shivansh/EliteCode/config/JsonImportRunner.java -----
@@ -2425,6 +2606,70 @@ public class SmtpTestController {
         }
     }
 }
+----- ./src/main/java/com/shivansh/EliteCode/controller/ChatController.java -----
+package com.shivansh.EliteCode.controller;
+
+import com.shivansh.EliteCode.dto.request.chat.AddMessageRequest;
+import com.shivansh.EliteCode.dto.request.chat.CreateSessionRequest;
+import com.shivansh.EliteCode.dto.request.chat.TitleRequest;
+import com.shivansh.EliteCode.model.ChatMessage;
+import com.shivansh.EliteCode.model.ChatSession;
+import com.shivansh.EliteCode.security.UserPrincipal;
+import com.shivansh.EliteCode.service.ChatService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/chat")
+@RequiredArgsConstructor
+public class ChatController {
+    private final ChatService chatService;
+
+    @PostMapping("/sessions")
+    public ResponseEntity<ChatSession> createSession(@AuthenticationPrincipal UserPrincipal user,
+                                                     @RequestBody CreateSessionRequest req) {
+        return ResponseEntity.ok(chatService.createSession(user.getId(), req.mode(), req.problemId(), req.title()));
+    }
+
+    @GetMapping("/sessions")
+    public ResponseEntity<List<ChatSession>> getSessions(@AuthenticationPrincipal UserPrincipal user) {
+        return ResponseEntity.ok(chatService.getUserSessions(user.getId()));
+    }
+
+    @GetMapping("/sessions/{sessionId}")
+    public ResponseEntity<ChatSession> getSession(@AuthenticationPrincipal UserPrincipal user,
+                                                  @PathVariable UUID sessionId) {
+        return ResponseEntity.ok(chatService.getFullSession(sessionId, user.getId()));
+    }
+
+    @PostMapping("/sessions/{sessionId}/messages")
+    public ResponseEntity<ChatMessage> addMessage(@AuthenticationPrincipal UserPrincipal user,
+                                                  @PathVariable UUID sessionId,
+                                                  @RequestBody AddMessageRequest req) {
+        return ResponseEntity.ok(chatService.addMessage(sessionId, user.getId(), req.role(), req.content(), req.problemSuggestions()));
+    }
+
+    @PutMapping("/sessions/{sessionId}/title")
+    public ResponseEntity<Void> updateTitle(@AuthenticationPrincipal UserPrincipal user,
+                                            @PathVariable UUID sessionId,
+                                            @RequestBody TitleRequest req) {
+        chatService.updateTitle(sessionId, user.getId(), req.title());
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/sessions/{sessionId}")
+    public ResponseEntity<Void> deleteSession(@AuthenticationPrincipal UserPrincipal user,
+                                              @PathVariable UUID sessionId) {
+        chatService.deleteSession(sessionId, user.getId());
+        return ResponseEntity.noContent().build();
+    }
+}
+
 ----- ./src/main/java/com/shivansh/EliteCode/controller/FeedbackController.java -----
 package com.shivansh.EliteCode.controller;
 
@@ -2990,9 +3235,12 @@ public class Problem {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class TestCase {
-        @Column(length = 5000)
+        @Lob
+        @Column(columnDefinition = "TEXT")
         private String input;
-        @Column(length = 5000)
+
+        @Lob
+        @Column(columnDefinition = "TEXT")
         private String expectedOutput;
     }
 }
@@ -3053,6 +3301,58 @@ public class AIResponse {
     
 }
 
+----- ./src/main/java/com/shivansh/EliteCode/model/ChatSession.java -----
+package com.shivansh.EliteCode.model;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.validator.constraints.UUID;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+@Entity
+@Table(name = "chat_sessions")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+public class ChatSession {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20, nullable = false)
+    private Mode mode;
+
+    @Column(length = 255)
+    private String title;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "problem_id")
+    private Problem problem;
+
+    @CreationTimestamp
+    private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    private LocalDateTime updatedAt;
+
+    @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ChatMessage> messages = new ArrayList<>();
+}
 ----- ./src/main/java/com/shivansh/EliteCode/model/Attempt.java -----
 package com.shivansh.EliteCode.model;
 
@@ -3461,6 +3761,45 @@ public enum Language {
     private final String fileExtension;
     private final String fileName;
     private final String runCommand;
+}
+----- ./src/main/java/com/shivansh/EliteCode/model/ChatMessage.java -----
+package com.shivansh.EliteCode.model;
+
+import com.shivansh.EliteCode.model.ChatSession;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import org.hibernate.validator.constraints.UUID;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "chat_messages")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+public class ChatMessage {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "session_id", nullable = false)
+    private ChatSession session;
+
+    @Column(length = 20, nullable = false)
+    private String role; // "user" or "assistant"
+
+    @Column(columnDefinition = "TEXT", nullable = false)
+    private String content;
+
+    @Column(columnDefinition = "jsonb")
+    private String problemSuggestions; // store as JSON string, or use a converter
+
+    private LocalDateTime timestamp;
 }
 ----- ./src/main/java/com/shivansh/EliteCode/filter/RateLimitingFilter.java -----
 package com.shivansh.EliteCode.filter;
@@ -4027,6 +4366,100 @@ public class HintServiceImpl implements HintService {
     }
 }
 
+----- ./src/main/java/com/shivansh/EliteCode/service/impl/ChatServiceImpl.java -----
+package com.shivansh.EliteCode.service.impl;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.shivansh.EliteCode.exception.CustomExceptions;
+import com.shivansh.EliteCode.model.ChatMessage;
+import com.shivansh.EliteCode.model.ChatSession;
+import com.shivansh.EliteCode.model.Mode;
+import com.shivansh.EliteCode.model.Problem;
+import com.shivansh.EliteCode.model.User;
+import com.shivansh.EliteCode.repository.ChatMessageRepository;
+import com.shivansh.EliteCode.repository.ChatSessionRepository;
+import com.shivansh.EliteCode.repository.ProblemRepository;
+import com.shivansh.EliteCode.repository.UserRepository;
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import org.hibernate.validator.constraints.UUID;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+
+@Service
+@Transactional
+@RequiredArgsConstructor
+public class ChatServiceImpl {
+    private final ChatSessionRepository sessionRepo;
+    private final ChatMessageRepository messageRepo;
+    private final UserRepository userRepo;
+    private final ProblemRepository problemRepo;
+    private final ObjectMapper objectMapper;
+
+    public ChatSession createSession(UUID userId, Mode mode, UUID problemId, String title) {
+        User user = userRepo.findById(userId).orElseThrow();
+        Problem problem = problemId != null ? problemRepo.findById(problemId).orElse(null) : null;
+        ChatSession session = new ChatSession();
+        session.setUser(user);
+        session.setMode(mode);
+        session.setProblem(problem);
+        session.setTitle(title != null ? title : mode + " Chat");
+        return sessionRepo.save(session);
+    }
+
+    public List<ChatSession> getUserSessions(UUID userId) {
+        return sessionRepo.findByUserIdOrderByUpdatedAtDesc(userId);
+    }
+
+    public ChatSession getFullSession(UUID sessionId, UUID userId) {
+        ChatSession session = sessionRepo.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException("Session not found"));
+        session.getMessages().size(); // force load
+        return session;
+    }
+
+    public ChatMessage addMessage(UUID sessionId, UUID userId, String role, String content, List<Map<String, Object>> problemSuggestions) {
+        ChatSession session = sessionRepo.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException("Session not found"));
+        ChatMessage msg = new ChatMessage();
+        msg.setSession(session);
+        msg.setRole(role);
+        msg.setContent(content);
+        msg.setTimestamp(LocalDateTime.now());
+        if (problemSuggestions != null) {
+            msg.setProblemSuggestions(convertToJson(problemSuggestions));
+        }
+        ChatMessage saved = messageRepo.save(msg);
+        session.setUpdatedAt(LocalDateTime.now()); // touch session
+        sessionRepo.save(session);
+        return saved;
+    }
+
+    public void updateTitle(UUID sessionId, UUID userId, String title) {
+        ChatSession session = sessionRepo.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException("Session not found"));
+        session.setTitle(title);
+        sessionRepo.save(session);
+    }
+
+    public void deleteSession(UUID sessionId, UUID userId) {
+        ChatSession session = sessionRepo.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new CustomExceptions.ResourceNotFoundException("Session not found"));
+        sessionRepo.delete(session);
+    }
+
+    private String convertToJson(List<Map<String, Object>> data) {
+        try {
+            return objectMapper.writeValueAsString(data);
+        } catch (JsonProcessingException e) {
+            throw new CustomExceptions.BadRequestException("Failed to serialize problem suggestions");
+        }
+    }
+}
 ----- ./src/main/java/com/shivansh/EliteCode/service/impl/EmailServiceImpl.java -----
 package com.shivansh.EliteCode.service.impl;
 
@@ -5364,6 +5797,26 @@ public interface UserService {
     User getUserById(UUID id);
 }
 
+----- ./src/main/java/com/shivansh/EliteCode/service/ChatService.java -----
+package com.shivansh.EliteCode.service;
+
+import com.shivansh.EliteCode.model.ChatMessage;
+import com.shivansh.EliteCode.model.ChatSession;
+import com.shivansh.EliteCode.model.Mode;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+public interface ChatService {
+    ChatSession createSession(UUID userId, Mode mode, UUID problemId, String title);
+    List<ChatSession> getUserSessions(UUID userId);
+    ChatSession getFullSession(UUID sessionId, UUID userId);
+    ChatMessage addMessage(UUID sessionId, UUID userId, String role, String content, List<Map<String, Object>> problemSuggestions);
+    void updateTitle(UUID sessionId, UUID userId, String title);
+    void deleteSession(UUID sessionId, UUID userId);
+}
+
 ----- ./src/main/java/com/shivansh/EliteCode/service/HintService.java -----
 package com.shivansh.EliteCode.service;
 
@@ -5408,6 +5861,78 @@ public interface AuthService {
     void changePassword(UUID id, @NotBlank String s, @NotBlank @Size(min=8) String s1);
 }
 
+----- ./src/main/java/com/shivansh/EliteCode/service/LeetCodeTagService.java -----
+package com.shivansh.EliteCode.service;
+
+import com.shivansh.EliteCode.dto.leetcode.LeetCodeGraphQLResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class LeetCodeTagService {
+
+    private final RestClient restClient = RestClient.create();
+
+    private static final int PAGE_SIZE = 100;
+
+    public List<LeetCodeGraphQLResponse.Question> fetchAllProblemsWithTags() {
+        List<LeetCodeGraphQLResponse.Question> allQuestions = new ArrayList<>();
+        int skip = 0;
+        int total = Integer.MAX_VALUE;
+
+        while (skip < total) {
+            String query = """
+            {
+              problemsetQuestionList: questionList(
+                categorySlug: ""
+                limit: %d
+                skip: %d
+                filters: {}
+              ) {
+                totalNum
+                questions: data {
+                  title
+                  topicTags { name }
+                }
+              }
+            }
+            """.formatted(PAGE_SIZE, skip);
+
+            log.info("Fetching page: skip={}, limit={}", skip, PAGE_SIZE);
+            LeetCodeGraphQLResponse response = restClient.post()
+                    .uri("https://leetcode.com/graphql")
+                    .body(Map.of("query", query))
+                    .retrieve()
+                    .body(LeetCodeGraphQLResponse.class);
+
+            if (response == null || response.getData() == null) {
+                log.error("No response for skip={}", skip);
+                break;
+            }
+
+            var pageData = response.getData().getProblemsetQuestionList();
+            if (pageData.getQuestions() == null || pageData.getQuestions().isEmpty()) {
+                break;
+            }
+
+            allQuestions.addAll(pageData.getQuestions());
+            total = pageData.getTotal();
+            skip += PAGE_SIZE;
+            log.info("Fetched {} problems, total available: {}", allQuestions.size(), total);
+        }
+
+        log.info("Finished fetching. Total problems from LeetCode: {}", allQuestions.size());
+        return allQuestions;
+    }
+}
 ----- ./src/main/java/com/shivansh/EliteCode/service/FeedbackService.java -----
 package com.shivansh.EliteCode.service;
 
