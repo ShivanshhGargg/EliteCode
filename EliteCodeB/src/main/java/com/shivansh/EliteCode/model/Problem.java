@@ -88,9 +88,12 @@ public class Problem {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class TestCase {
-        @Column(length = 5000)
+        @Lob
+        @Column(columnDefinition = "TEXT")
         private String input;
-        @Column(length = 5000)
+
+        @Lob
+        @Column(columnDefinition = "TEXT")
         private String expectedOutput;
     }
 }

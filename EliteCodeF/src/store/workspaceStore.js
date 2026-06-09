@@ -3,8 +3,7 @@ import { persist } from 'zustand/middleware';
 
 const useWorkspaceStore = create(persist((set) => ({
     selectedProblem: null,
-    setSelectedProblem: (problem) =>
-        set({ selectedProblem: problem }),
+    setSelectedProblem: (problem) => set({ selectedProblem: problem }),
 }), {
     name: 'elitecode-workspace-state',
 }));

@@ -12,7 +12,7 @@ import { ToastContainer } from '../components/ToastContainer'
 import useUIStore from '../store/uiStore'
 import { getThemePreset } from '../utils/theme'
 import { getDifficultyBg, getModeDescription } from '../utils/format'
-import { BookOpen, ListChecks, MessageCircle, Share2, Target, Minimize2, Maximize2, PanelRightClose, PanelLeftClose } from 'lucide-react'
+import { BookOpen, ListChecks, MessageCircle, Share2, Target, Minimize2, Maximize2, PanelRightClose, PanelLeftClose, X } from 'lucide-react'
 import useToastStore from '../store/toastStore'
 import { InterviewStartModal } from '../components/InterviewStartModal'
 import { hintService } from '../api/hintService'
@@ -35,7 +35,7 @@ export function WorkspacePage() {
     const themePreset = getThemePreset(theme)
     const { addToast } = useToastStore()
     const { startSession, getSession, getActiveInterviewSession } = useInterviewStore()
-    const { selectedProblem } = useWorkspaceStore()
+    const { selectedProblem, setSelectedProblem } = useWorkspaceStore()
     const isStandard = mode === 'STANDARD'
 
     const sessionData = useInterviewStore((state) => state.sessions[currentSessionId])
@@ -149,7 +149,7 @@ export function WorkspacePage() {
 
     const renderProblemPanel = () => (
         <section className="leetcode-panel flex min-h-0 flex-col overflow-hidden">
-            <div className="shrink-0 border-b border-white/10 px-4 py-3">
+            <div className="shrink-0 relative border-b border-white/10 px-4 py-3">
                 <div className="mb-3 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-xs font-semibold text-txt-secondary">
                         {mode === 'INTERVIEW' ? <Target size={14} className="text-magenta" /> : <BookOpen size={14} className="text-violet" />}
@@ -163,6 +163,18 @@ export function WorkspacePage() {
                         <Minimize2 size={14} />
                     </button>
                 </div>
+
+                {/* Close button – only visible when a problem is selected */}
+                {selectedProblem && (
+                    <button
+                        onClick={() => setSelectedProblem(null)}
+                        className="absolute top-3 right-12 rounded-md p-1.5 text-txt-muted hover:bg-white/10 hover:text-txt-primary transition-colors"
+                        title="Close problem"
+                    >
+                        <X size={14} />
+                    </button>
+                )}
+
                 {selectedProblem ? (
                     <>
                         <h1 className="text-lg font-semibold leading-snug text-txt-primary">{selectedProblem.title}</h1>
@@ -264,29 +276,29 @@ export function WorkspacePage() {
                                         <CodeWorkspace workspaceControls={workspaceControls} />
                                     </div>
                                     {showAi && (
-                                    <section className="leetcode-panel flex min-h-[320px] flex-col overflow-hidden xl:min-h-0">
-                                        <div className="shrink-0 border-b border-white/10 px-4 py-3">
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div>
-                                                    <div className="flex items-center gap-2 text-sm font-semibold text-txt-primary">
-                                                        <MessageCircle size={15} className={mode === 'INTERVIEW' ? 'text-magenta' : 'text-violet'} />
-                                                        {mode === 'INTERVIEW' ? 'Interviewer' : 'Tutor'}
+                                        <section className="leetcode-panel flex min-h-[320px] flex-col overflow-hidden xl:min-h-0">
+                                            <div className="shrink-0 border-b border-white/10 px-4 py-3">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <div className="flex items-center gap-2 text-sm font-semibold text-txt-primary">
+                                                            <MessageCircle size={15} className={mode === 'INTERVIEW' ? 'text-magenta' : 'text-violet'} />
+                                                            {mode === 'INTERVIEW' ? 'Interviewer' : 'Tutor'}
+                                                        </div>
+                                                        <p className="mt-1 text-xs text-txt-muted">{getModeDescription(mode)}</p>
                                                     </div>
-                                                    <p className="mt-1 text-xs text-txt-muted">{getModeDescription(mode)}</p>
+                                                    <button
+                                                        onClick={() => setAiCollapsed(true)}
+                                                        className="rounded-md p-1.5 text-txt-muted hover:bg-white/10 hover:text-txt-primary"
+                                                        title="Minimize AI chat"
+                                                    >
+                                                        <Minimize2 size={14} />
+                                                    </button>
                                                 </div>
-                                                <button
-                                                    onClick={() => setAiCollapsed(true)}
-                                                    className="rounded-md p-1.5 text-txt-muted hover:bg-white/10 hover:text-txt-primary"
-                                                    title="Minimize AI chat"
-                                                >
-                                                    <Minimize2 size={14} />
-                                                </button>
                                             </div>
-                                        </div>
-                                        <div className="min-h-0 flex-1">
-                                            <ChatInterface showProblemPanel={false} />
-                                        </div>
-                                    </section>
+                                            <div className="min-h-0 flex-1">
+                                                <ChatInterface showProblemPanel={false} />
+                                            </div>
+                                        </section>
                                     )}
                                 </div>
                             )}
