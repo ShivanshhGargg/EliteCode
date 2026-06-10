@@ -108,7 +108,6 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
   const fileInputRef = useRef(null)
 
   const { addToast } = useToastStore()
-  const { selectedProblem } = useWorkspaceStore()
   const {
     mode,
     sessions,
@@ -119,8 +118,13 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
     setCurrentSession,
     setMode,
     deleteSession,
+    loadMessages,
   } = useChatStore()
   const { getActiveInterviewSession } = useInterviewStore()
+  const { getSelectedProblem, setSelectedProblem } = useWorkspaceStore()
+
+  // ✅ Use mode-specific selected problem
+  const selectedProblem = getSelectedProblem(mode)
 
   const session = useMemo(
       () => sessions.find((item) => item.id === currentSessionId) || null,
@@ -130,19 +134,18 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
   const sessionData = useInterviewStore((state) => state.sessions[currentSessionId])
   const isSessionStarted = mode === 'INTERVIEW' ? sessionData?.started === true : true
 
-  const ensureSession = (withWelcome = false) => {
-    const storeSessions = useChatStore.getState().sessions
-    let sess = storeSessions.find((item) => item.id === currentSessionId) || null
+  const ensureSession = async (withWelcome = false) => {
+    let sess = sessions.find((item) => item.id === currentSessionId) || null
     let sessId = sess?.id || null
 
     if (!sess || sess.mode !== mode) {
-      const existing = storeSessions.find((item) => item.mode === mode)
+      const existing = sessions.find((item) => item.mode === mode)
       if (existing) {
         setCurrentSession(existing.id)
         sessId = existing.id
         sess = existing
       } else {
-        const newId = createSession(selectedProblem?.id || null, `${mode} Assistant`, mode)
+        const newId = await createSession(selectedProblem?.id || null, `${mode} Assistant`, mode)
         sessId = newId
         sess = { id: newId, messages: [] }
         setCurrentSession(newId)
@@ -150,10 +153,10 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
     }
 
     if (withWelcome && sessId) {
-      const latestSession = useChatStore.getState().sessions.find((item) => item.id === sessId) || sess
+      const latestSession = sessions.find((item) => item.id === sessId) || sess
       if ((latestSession?.messages || []).length === 0) {
         const welcomeContent = modeWelcomes[mode] || modeWelcomes.STANDARD
-        addMessage(sessId, {
+        await addMessage(sessId, {
           id: `welcome-${sessId}`,
           role: 'assistant',
           content: welcomeContent,
@@ -164,8 +167,6 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
 
     return sessId
   }
-
-  // Remove any auto-creation effect on mount or mode change. We rely on ensureSession on send.
 
   // Copy/paste disable for INTERVIEW mode
   useEffect(() => {
@@ -212,26 +213,26 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
   const embeddedAccent =
       mode === 'INTERVIEW'
           ? {
-              text: 'text-magenta',
-              border: 'border-magenta/25',
-              bg: 'bg-magenta/10',
-              hover: 'hover:text-magenta hover:border-magenta/40',
-              focus: 'focus-within:border-magenta/35',
-            }
+            text: 'text-magenta',
+            border: 'border-magenta/25',
+            bg: 'bg-magenta/10',
+            hover: 'hover:text-magenta hover:border-magenta/40',
+            focus: 'focus-within:border-magenta/35',
+          }
           : {
-              text: 'text-violet',
-              border: 'border-violet/25',
-              bg: 'bg-violet/10',
-              hover: 'hover:text-violet hover:border-violet/40',
-              focus: 'focus-within:border-violet/35',
-            }
+            text: 'text-violet',
+            border: 'border-violet/25',
+            bg: 'bg-violet/10',
+            hover: 'hover:text-violet hover:border-violet/40',
+            focus: 'focus-within:border-violet/35',
+          }
 
-  const handleNewSession = () => {
+  const handleNewSession = async () => {
     if (activeInterview) {
       addToast('End the active interview before starting another session.', 'warning')
       return
     }
-    createSession(selectedProblem?.id || null, `${mode} Assistant`, mode)
+    await createSession(selectedProblem?.id || null, `${mode} Assistant`, mode)
     setHistoryOpen(false)
   }
 
@@ -245,13 +246,13 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
     setHistoryOpen(false)
   }
 
-  const handleDeleteHistory = (event, target) => {
+  const handleDeleteHistory = async (event, target) => {
     event.stopPropagation()
     if (activeInterview && target.id === activeInterview.sessionId) {
       addToast('End the active interview before deleting it.', 'warning')
       return
     }
-    deleteSession(target.id)
+    await deleteSession(target.id)
   }
 
   const handleFiles = async (fileList) => {
@@ -285,8 +286,7 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
 
   const { mutate: sendMessage, isPending } = useMutation({
     mutationFn: async ({ content, sessionId }) => {
-      const targetMessages =
-          useChatStore.getState().sessions.find((item) => item.id === sessionId)?.messages || messages
+      const targetMessages = sessions.find((item) => item.id === sessionId)?.messages || messages
       const currentApproach = targetMessages
           .filter((item) => item.role === 'user')
           .slice(-5)
@@ -297,9 +297,9 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
       const guidedQuestion = `${modeGuide}\n\nUser message:\n${content}`
       return hintService.requestHint(selectedProblem?.id || null, guidedContext, guidedQuestion, mode, null)
     },
-    onSuccess: (data, { content, sessionId }) => {
+    onSuccess: async (data, { content, sessionId }) => {
       if (!sessionId) return
-      addMessage(sessionId, {
+      await addMessage(sessionId, {
         id: Date.now(),
         role: 'assistant',
         content: extractHintText(data),
@@ -308,21 +308,22 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
             ? { problemSuggestions: learningProblems.slice(0, 4) }
             : {}),
       })
-      const latestSession = useChatStore.getState().sessions.find((item) => item.id === sessionId)
+      const latestSession = sessions.find((item) => item.id === sessionId)
       if (latestSession && latestSession.title.endsWith('Assistant')) {
-        hintService.generateSessionTitle({
-          mode,
-          problemTitle: selectedProblem?.title || '',
-          conversation: [
-            ...latestSession.messages.filter((item) => !String(item.id).startsWith('welcome-')),
-            { role: 'assistant', content: extractHintText(data) },
-          ]
-              .slice(-4)
-              .map((item) => `${item.role}: ${item.content}`)
-              .join('\n'),
-        }).then((result) => {
-          if (result?.title) updateSessionTitle(sessionId, result.title)
-        }).catch(() => {})
+        try {
+          const result = await hintService.generateSessionTitle({
+            mode,
+            problemTitle: selectedProblem?.title || '',
+            conversation: [
+              ...latestSession.messages.filter((item) => !String(item.id).startsWith('welcome-')),
+              { role: 'assistant', content: extractHintText(data) },
+            ]
+                .slice(-4)
+                .map((item) => `${item.role}: ${item.content}`)
+                .join('\n'),
+          })
+          if (result?.title) await updateSessionTitle(sessionId, result.title)
+        } catch (err) {}
       }
       if (mode === 'INTERVIEW' && isSessionStarted) {
         const lower = (data?.hint || '').toLowerCase()
@@ -339,13 +340,12 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
     },
   })
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!input.trim() || isPending) return
 
-    // Ensure session exists (creates only if needed) and add welcome if empty
-    const sessionId = ensureSession(true)
-    if (!sessionId) return // should not happen
+    const sessionId = await ensureSession(true)
+    if (!sessionId) return
 
     const attachmentText = attachments.length
         ? `\n\nUploaded files:\n${attachments
@@ -361,7 +361,7 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
       content: finalMessage,
       timestamp: new Date().toISOString(),
     }
-    addMessage(sessionId, userMsg)
+    await addMessage(sessionId, userMsg)
     setInput('')
     setAttachments([])
     sendMessage({ content: finalMessage, sessionId })
@@ -382,16 +382,23 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
     if (isSessionStarted) inputRef.current?.focus()
   }, [isSessionStarted, session?.id])
 
+  // Load messages when a session is selected and it doesn't have messages loaded yet
+  useEffect(() => {
+    if (currentSessionId && session && (!session.messages || session.messages.length === 0)) {
+      loadMessages(currentSessionId)
+    }
+  }, [currentSessionId, session, loadMessages])
+
   return (
       <div className={`flex h-full flex-col overflow-hidden ${showProblemPanel ? 'rounded-2xl glass-panel' : 'bg-[#0b1020]/70'}`}>
         {!showProblemPanel && (
-        <div className="relative shrink-0 border-b border-white/10 bg-white/[0.015] px-3 py-2">
+            <div className="relative shrink-0 border-b border-white/10 bg-white/[0.015] px-3 py-2">
               <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${mode === 'INTERVIEW' ? 'bg-magenta' : 'bg-violet'}`} />
-                    <span className="h-px w-8 bg-white/15" />
-                  </div>
-                  <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2">
+                  <span className={`h-2 w-2 rounded-full ${mode === 'INTERVIEW' ? 'bg-magenta' : 'bg-violet'}`} />
+                  <span className="h-px w-8 bg-white/15" />
+                </div>
+                <div className="flex items-center gap-1">
                   <button
                       onClick={handleNewSession}
                       className={`inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-white/[0.025] text-txt-secondary ${embeddedAccent.hover}`}
@@ -406,7 +413,7 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
                   >
                     <History size={14} />
                   </button>
-                  </div>
+                </div>
               </div>
               {historyOpen && (
                   <div className="absolute right-3 top-[calc(100%+6px)] z-50 max-h-80 w-72 overflow-y-auto rounded-md border border-white/10 bg-[#080d19]/95 p-1 shadow-2xl backdrop-blur">
@@ -440,7 +447,7 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
                     ))}
                   </div>
               )}
-        </div>
+            </div>
         )}
         {/* Problem Statement Panel (collapsible) */}
         {showProblemPanel && selectedProblem && (
@@ -548,9 +555,8 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
                     }
                   }}
                   placeholder={canAttach ? 'Ask a question or request a hint...' : 'Ask a question (copy/paste disabled)'}
-                  rows={isEmbedded ? 1 : 2}
-                  className={`flex-1 resize-none bg-transparent text-sm text-txt-primary placeholder:text-txt-muted outline-none ${isEmbedded ? 'py-1.5' : 'py-2'}`}
-                  style={{ minHeight: isEmbedded ? '38px' : '60px' }}
+                  rows={1}
+                  className="flex-1 resize-none bg-transparent text-sm text-txt-primary placeholder:text-txt-muted outline-none py-2 px-1 min-h-[40px]"
               />
               <NeonButton
                   type="submit"
@@ -558,9 +564,9 @@ export default function ChatInterface({ showProblemPanel = true, learningProblem
                   size="icon"
                   loading={isPending}
                   disabled={!input.trim() || isPending || !isSessionStarted}
-                  className="rounded-xl"
+                  className="rounded-full w-9 h-9 flex items-center justify-center"
               >
-                <Send size={14} />
+                <Send size={16} />
               </NeonButton>
             </div>
           </form>

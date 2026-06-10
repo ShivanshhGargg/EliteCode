@@ -6,6 +6,7 @@ import com.shivansh.EliteCode.dto.response.user.AccountResponse;
 import com.shivansh.EliteCode.dto.response.user.UserProfileResponse;
 import com.shivansh.EliteCode.dto.response.user.UserProgressResponse;
 import com.shivansh.EliteCode.repository.AccountRepository;
+import com.shivansh.EliteCode.repository.AttemptRepository;
 import com.shivansh.EliteCode.security.UserPrincipal;
 import com.shivansh.EliteCode.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,6 +18,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/users")
@@ -25,6 +28,7 @@ public class UserController {
 
     private final UserService userService;
     private final AccountRepository accountRepository;
+    private final AttemptRepository attemptRepository;
 
     @GetMapping("/me")
     @Operation(summary = "Get current user profile")
@@ -84,4 +88,9 @@ public class UserController {
                 .toList());
     }
 
+    @GetMapping("/me/solved")
+    public ResponseEntity<Set<UUID>> getSolvedProblemIds(@AuthenticationPrincipal UserPrincipal user) {
+        Set<UUID> solved = attemptRepository.findSolvedProblemIdsByUserId(user.getId());
+        return ResponseEntity.ok(solved);
+    }
 }

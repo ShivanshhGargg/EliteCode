@@ -1,18 +1,20 @@
-import { useState } from 'react'
+// src/pages/WorkspacePage.jsx
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sidebar } from '../components/Sidebar'
 import ChatInterface from '../components/ChatInterface'
 import { CodeWorkspace } from '../components/CodeWorkspace'
 import { TopBar } from '../components/TopBar'
-import { LearningWelcome } from '../components/LearningWelcome'
+import LearnModeLayout  from '../components/LearnModeLayout.jsx'
 import useChatStore from '../store/chatStore'
+import useAuthStore from '../store/authStore'
 import useInterviewStore from '../store/interviewStore'
 import useWorkspaceStore from '../store/workspaceStore'
 import { ToastContainer } from '../components/ToastContainer'
 import useUIStore from '../store/uiStore'
 import { getThemePreset } from '../utils/theme'
 import { getDifficultyBg, getModeDescription } from '../utils/format'
-import { BookOpen, ListChecks, MessageCircle, Share2, Target, Minimize2, Maximize2, PanelRightClose, PanelLeftClose, X } from 'lucide-react'
+import { BookOpen, MessageCircle, Share2, Target, Minimize2, Maximize2, PanelRightClose, PanelLeftClose, X } from 'lucide-react'
 import useToastStore from '../store/toastStore'
 import { InterviewStartModal } from '../components/InterviewStartModal'
 import { hintService } from '../api/hintService'
@@ -29,15 +31,18 @@ export function WorkspacePage() {
         setCurrentSession,
         addMessage,
         updateSessionTitle,
-        sessions
+        sessions,
+        initForUser,
     } = useChatStore()
     const theme = useUIStore((state) => state.theme)
     const themePreset = getThemePreset(theme)
     const { addToast } = useToastStore()
-    const { startSession, getSession, getActiveInterviewSession } = useInterviewStore()
-    const { selectedProblem, setSelectedProblem } = useWorkspaceStore()
-    const isStandard = mode === 'STANDARD'
+    const { startSession, getSession, getActiveInterviewSession, endSession } = useInterviewStore()
+    const { setSelectedProblem, getSelectedProblem } = useWorkspaceStore()
+    const user = useAuthStore(state => state.user)
 
+    const selectedProblem = getSelectedProblem(mode)
+    const isStandard = mode === 'STANDARD'
     const sessionData = useInterviewStore((state) => state.sessions[currentSessionId])
     const isSessionStarted = sessionData?.started === true
 
@@ -45,6 +50,12 @@ export function WorkspacePage() {
     const [descriptionCollapsed, setDescriptionCollapsed] = useState(false)
     const [aiCollapsed, setAiCollapsed] = useState(false)
     const [codeMaximized, setCodeMaximized] = useState(false)
+
+    useEffect(() => {
+        if (user?.id) {
+            initForUser(user.id)
+        }
+    }, [user?.id, initForUser])
 
     const handleCloseModal = () => {
         setShowInterviewModal(false)
@@ -62,7 +73,8 @@ export function WorkspacePage() {
         const currentInterviewData = getSession(currentSessionId);
         let sessionId = currentSessionId;
         if (!sessionId || sessions.find((s) => s.id === sessionId)?.mode !== 'INTERVIEW' || currentInterviewData?.endedAt) {
-            sessionId = createSession(selectedProblem?.id || null, 'Interview Assistant', 'INTERVIEW');
+            const problemId = getSelectedProblem('INTERVIEW')?.id || null
+            sessionId = createSession(problemId, 'Interview Assistant', 'INTERVIEW');
         }
         setCurrentSession(sessionId);
 
@@ -87,6 +99,10 @@ export function WorkspacePage() {
         }).catch(() => {})
 
         setShowInterviewModal(false);
+    }
+
+    const handleCloseProblem = () => {
+        setSelectedProblem(null, mode)
     }
 
     const mainMarginLeft = isSidebarOpen && isStandard ? '300px' : '0px'
@@ -114,20 +130,6 @@ export function WorkspacePage() {
     const workspaceControls = (
         <>
             <button
-                onClick={() => setDescriptionCollapsed((value) => !value)}
-                className="rounded-md p-1.5 text-txt-muted hover:bg-white/10 hover:text-txt-primary"
-                title={descriptionCollapsed ? 'Show description' : 'Hide description'}
-            >
-                <PanelLeftClose size={14} />
-            </button>
-            <button
-                onClick={() => setAiCollapsed((value) => !value)}
-                className="rounded-md p-1.5 text-txt-muted hover:bg-white/10 hover:text-txt-primary"
-                title={aiCollapsed ? 'Show AI chat' : 'Hide AI chat'}
-            >
-                <PanelRightClose size={14} />
-            </button>
-            <button
                 onClick={() => {
                     const next = !codeMaximized
                     setCodeMaximized(next)
@@ -149,32 +151,31 @@ export function WorkspacePage() {
 
     const renderProblemPanel = () => (
         <section className="leetcode-panel flex min-h-0 flex-col overflow-hidden">
-            <div className="shrink-0 relative border-b border-white/10 px-4 py-3">
+            <div className="shrink-0 border-b border-white/10 px-4 py-3">
                 <div className="mb-3 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-xs font-semibold text-txt-secondary">
                         {mode === 'INTERVIEW' ? <Target size={14} className="text-magenta" /> : <BookOpen size={14} className="text-violet" />}
                         <span>{mode === 'INTERVIEW' ? 'Interview Prompt' : 'Problem'}</span>
                     </div>
-                    <button
-                        onClick={() => setDescriptionCollapsed(true)}
-                        className="rounded-md p-1.5 text-txt-muted hover:bg-white/10 hover:text-txt-primary"
-                        title="Minimize description"
-                    >
-                        <Minimize2 size={14} />
-                    </button>
+                    <div className="flex gap-1">
+                        <button
+                            onClick={() => setDescriptionCollapsed(true)}
+                            className="rounded-md p-1.5 text-txt-muted hover:bg-white/10 hover:text-txt-primary"
+                            title="Minimize description"
+                        >
+                            <Minimize2 size={14} />
+                        </button>
+                        {selectedProblem && mode !== 'INTERVIEW' && (
+                            <button
+                                onClick={handleCloseProblem}
+                                className="rounded-md p-1.5 text-txt-muted hover:bg-neon-red/10 hover:text-neon-red"
+                                title="Close problem"
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
+                    </div>
                 </div>
-
-                {/* Close button – only visible when a problem is selected */}
-                {selectedProblem && (
-                    <button
-                        onClick={() => setSelectedProblem(null)}
-                        className="absolute top-3 right-12 rounded-md p-1.5 text-txt-muted hover:bg-white/10 hover:text-txt-primary transition-colors"
-                        title="Close problem"
-                    >
-                        <X size={14} />
-                    </button>
-                )}
-
                 {selectedProblem ? (
                     <>
                         <h1 className="text-lg font-semibold leading-snug text-txt-primary">{selectedProblem.title}</h1>
@@ -193,14 +194,8 @@ export function WorkspacePage() {
                     <>
                         <h1 className="text-lg font-semibold text-txt-primary">No problem selected</h1>
                         <p className="mt-2 text-sm leading-relaxed text-txt-secondary">
-                            Pick a coding problem to unlock run, submit, hints, and interview follow-ups.
+                            Pick a coding problem from the left panel (Learning mode) to unlock run, submit, hints, and interview follow-ups.
                         </p>
-                        <button
-                            onClick={() => navigate('/problems')}
-                            className="mt-4 inline-flex items-center gap-2 rounded-md border border-cyan/30 bg-cyan/10 px-3 py-2 text-sm font-medium text-cyan hover:bg-cyan/15"
-                        >
-                            <ListChecks size={14} /> Browse Problems
-                        </button>
                     </>
                 )}
             </div>
@@ -214,6 +209,23 @@ export function WorkspacePage() {
                         {getModeDescription(mode)}
                     </div>
                 )}
+            </div>
+        </section>
+    )
+
+    const renderAiPanel = () => (
+        <section className="leetcode-panel flex min-h-[320px] flex-col overflow-hidden xl:min-h-0">
+            <div className="shrink-0 border-b border-white/10 px-3 py-2 flex items-center justify-end">
+                <button
+                    onClick={() => setAiCollapsed(true)}
+                    className="rounded-md p-1.5 text-txt-muted hover:bg-white/10 hover:text-txt-primary"
+                    title="Minimize AI chat"
+                >
+                    <Minimize2 size={14} />
+                </button>
+            </div>
+            <div className="min-h-0 flex-1">
+                <ChatInterface showProblemPanel={false} />
             </div>
         </section>
     )
@@ -250,7 +262,7 @@ export function WorkspacePage() {
                             <TopBar onToggleSidebar={toggleSidebar} />
 
                             {mode === 'LEARNING' && !selectedProblem ? (
-                                <LearningWelcome />
+                                <LearnModeLayout />
                             ) : mode === 'INTERVIEW' && !isSessionStarted ? (
                                 <div className="flex-1 flex items-center justify-center">
                                     <div className="leetcode-panel p-8 max-w-md w-full text-center">
@@ -275,31 +287,7 @@ export function WorkspacePage() {
                                     <div className="min-h-[420px] overflow-hidden xl:min-h-0">
                                         <CodeWorkspace workspaceControls={workspaceControls} />
                                     </div>
-                                    {showAi && (
-                                        <section className="leetcode-panel flex min-h-[320px] flex-col overflow-hidden xl:min-h-0">
-                                            <div className="shrink-0 border-b border-white/10 px-4 py-3">
-                                                <div className="flex items-start justify-between gap-3">
-                                                    <div>
-                                                        <div className="flex items-center gap-2 text-sm font-semibold text-txt-primary">
-                                                            <MessageCircle size={15} className={mode === 'INTERVIEW' ? 'text-magenta' : 'text-violet'} />
-                                                            {mode === 'INTERVIEW' ? 'Interviewer' : 'Tutor'}
-                                                        </div>
-                                                        <p className="mt-1 text-xs text-txt-muted">{getModeDescription(mode)}</p>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => setAiCollapsed(true)}
-                                                        className="rounded-md p-1.5 text-txt-muted hover:bg-white/10 hover:text-txt-primary"
-                                                        title="Minimize AI chat"
-                                                    >
-                                                        <Minimize2 size={14} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div className="min-h-0 flex-1">
-                                                <ChatInterface showProblemPanel={false} />
-                                            </div>
-                                        </section>
-                                    )}
+                                    {showAi && renderAiPanel()}
                                 </div>
                             )}
                         </div>

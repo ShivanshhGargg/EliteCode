@@ -4,6 +4,7 @@ import com.shivansh.EliteCode.dto.request.problem.CreateProblemRequest;
 import com.shivansh.EliteCode.dto.request.problem.UpdateProblemRequest;
 import com.shivansh.EliteCode.dto.response.common.PageResponse;
 import com.shivansh.EliteCode.dto.response.problem.ProblemResponse;
+import com.shivansh.EliteCode.dto.response.problem.ProblemSummaryResponse;
 import com.shivansh.EliteCode.dto.response.problem.ProblemTestCaseResponse;
 import com.shivansh.EliteCode.exception.CustomExceptions;
 import com.shivansh.EliteCode.mapper.ProblemMapper;
@@ -163,5 +164,33 @@ public class ProblemServiceImpl implements ProblemService {
             problem.setDeletedAt(java.time.LocalDateTime.now());
             problemRepository.save(problem);
         }
+    }
+    
+    @Override
+    public PageResponse<ProblemSummaryResponse> listProblemSummaries(int page, int size,
+                                                                     Problem.Difficulty difficulty,
+                                                                     String title,
+                                                                     List<String> tags,
+                                                                     Sort sort) {
+        var pageable = PageRequest.of(page, size, sort);
+        Page<Problem> problemPage;
+
+        boolean hasTitle = title != null && !title.isBlank();
+        boolean hasDifficulty = difficulty != null;
+        boolean hasTags = tags != null && !tags.isEmpty();
+
+        if (hasTitle) {
+            problemPage = problemRepository.findAllByFilters(difficulty, title, pageable);
+        } else if (hasDifficulty && hasTags) {
+            problemPage = problemRepository.findByDifficultyAndTagsIn(difficulty, tags, pageable);
+        } else if (hasDifficulty) {
+            problemPage = problemRepository.findByDifficultyAndDeletedFalse(difficulty, pageable);
+        } else if (hasTags) {
+            problemPage = problemRepository.findByTagsIn(tags, pageable);
+        } else {
+            problemPage = problemRepository.findAllByDeletedFalse(pageable);
+        }
+
+        return pageResponseMapper.toPageResponse(problemPage, ProblemSummaryResponse::from);
     }
 }

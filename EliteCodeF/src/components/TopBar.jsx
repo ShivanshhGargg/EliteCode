@@ -3,15 +3,12 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
     User, LogOut, Settings,
-    Target, BookOpen, Sparkles, Zap, ChevronDown, Menu, Timer,
-    Pause, Play, RotateCcw, PlusCircle, StopCircle
+    Target, BookOpen, Sparkles, Zap, ChevronDown, Menu, XCircle,
 } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import useChatStore from '../store/chatStore'
 import useToastStore from '../store/toastStore'
 import useInterviewStore from '../store/interviewStore'
-import { ModeTimer } from './ModeTimer'
-import { LearningTimerModal } from './LearningTimerModal'
 
 const MODES = [
     { key: 'STANDARD', icon: Sparkles, label: 'Standard', color: 'cyan' },
@@ -23,7 +20,7 @@ export function TopBar({ onToggleSidebar }) {
     const navigate = useNavigate()
     const { user, logout } = useAuth()
     const { addToast } = useToastStore()
-    const { pauseTimer, resumeTimer, resetTimer, addTime, endSession, getSession, getActiveInterviewSession } = useInterviewStore()
+    const { getActiveInterviewSession, endAndClearInterview } = useInterviewStore()
     const {
         mode, setMode, currentSessionByMode,
         currentSessionId,
@@ -31,16 +28,13 @@ export function TopBar({ onToggleSidebar }) {
     } = useChatStore()
 
     const [showProfileMenu, setShowProfileMenu] = useState(false)
-    const [showTimerModal, setShowTimerModal] = useState(false)
     const [profilePos, setProfilePos] = useState({ top: 0, left: 0 })
     const profileButtonRef = useRef(null)
     const profileMenuRef = useRef(null)
 
-    const sessionData = getSession(currentSessionId)
     const activeInterview = getActiveInterviewSession()
-    const isTimerRunning = sessionData?.started && !sessionData?.paused
-    const hasTimer = sessionData?.timeLimit != null
     const isActiveInterview = Boolean(activeInterview)
+    const isInterviewStarted = mode === 'INTERVIEW' && isActiveInterview
 
     useEffect(() => {
         if (showProfileMenu && profileButtonRef.current) {
@@ -63,15 +57,60 @@ export function TopBar({ onToggleSidebar }) {
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
+    const handleQuitInterview = async () => {
+        if (!activeInterview) return
+
+        const confirmed = window.confirm('End this interview? Your progress will be lost.')
+        if (!confirmed) return
+
+        const sessionId = activeInterview.sessionId
+
+        // Add final message before ending
+        await addMessage(sessionId, {
+            id: `interview-ended-${Date.now()}`,
+            role: 'assistant',
+            content: `Interview ended manually. Final score: ${activeInterview.score ?? 0}. You can start a new interview anytime.`,
+            timestamp: new Date().toISOString(),
+        })
+
+        endAndClearInterview(sessionId)
+        setMode('STANDARD')
+
+        // Ensure we have a STANDARD session
+        if (!currentSessionByMode.STANDARD) {
+            createSession(null, 'Standard Assistant', 'STANDARD')
+        } else {
+            setCurrentSession(currentSessionByMode.STANDARD)
+        }
+
+        addToast('Interview ended', 'info')
+    }
+
     const handleModeChange = (newMode) => {
         if (newMode === mode) return
-        if (isActiveInterview && newMode !== 'INTERVIEW') {
-            addToast('End the interview before switching modes.', 'warning')
+
+        if (isActiveInterview) {
+            const confirmMsg = 'You have an active interview. Do you want to end it and switch mode?'
+            if (window.confirm(confirmMsg)) {
+                // End interview
+                const sessionId = activeInterview.sessionId
+                addMessage(sessionId, {
+                    id: `interview-ended-${Date.now()}`,
+                    role: 'assistant',
+                    content: `Interview ended early. Final score: ${activeInterview.score ?? 0}.`,
+                    timestamp: new Date().toISOString(),
+                }).catch(() => {})
+                endAndClearInterview(sessionId)
+                // Now switch mode
+                setMode(newMode)
+                if (!currentSessionByMode[newMode]) {
+                    createSession(null, `${newMode} Assistant`, newMode)
+                }
+                addToast(`Switched to ${newMode} mode`, 'info')
+            }
             return
         }
-        if (isActiveInterview && newMode === 'INTERVIEW') {
-            setCurrentSession(activeInterview.sessionId)
-        }
+
         setMode(newMode)
         if (!currentSessionByMode[newMode]) {
             createSession(null, `${newMode} Assistant`, newMode)
@@ -83,49 +122,6 @@ export function TopBar({ onToggleSidebar }) {
         navigate('/login')
     }
 
-    const handlePauseResume = () => {
-        if (!currentSessionId) return
-        if (isTimerRunning) {
-            pauseTimer(currentSessionId)
-        } else {
-            resumeTimer(currentSessionId)
-        }
-    }
-
-    const handleResetTimer = () => {
-        if (!currentSessionId) return
-        resetTimer(currentSessionId)
-    }
-
-    const handleAddTime = (seconds) => {
-        if (!currentSessionId) return
-        addTime(currentSessionId, seconds)
-    }
-
-    const handleSetTimer = () => {
-        if (!currentSessionId) {
-            const newId = createSession(null, 'Learning Assistant', 'LEARNING')
-            setCurrentSession(newId)
-        }
-        setShowTimerModal(true)
-    }
-
-    const handleEndInterview = () => {
-        const interview = getActiveInterviewSession()
-        if (!interview) return
-
-        endSession(interview.sessionId)
-        addMessage(interview.sessionId, {
-            id: `interview-ended-${Date.now()}`,
-            role: 'assistant',
-            content: `Interview ended. Final score: ${interview.score ?? 0}. Review your answers, note weak areas, and start a fresh interview when you are ready.`,
-            timestamp: new Date().toISOString(),
-        })
-        setCurrentSession(interview.sessionId)
-        setMode('STANDARD')
-    }
-
-    // Navigation helpers
     const goToProgress = () => {
         setShowProfileMenu(false)
         navigate('/progress')
@@ -175,67 +171,17 @@ export function TopBar({ onToggleSidebar }) {
                             )
                         })}
                     </div>
-
                 </div>
 
                 <div className="flex items-center gap-3">
-                    {mode === 'LEARNING' && (
-                        <div className="flex items-center gap-2">
-                            <ModeTimer mode="LEARNING" sessionId={currentSessionId} />
-                            {hasTimer && (
-                                <>
-                                    <button
-                                        onClick={handlePauseResume}
-                                        className="p-1.5 rounded-lg hover:bg-white/10 text-txt-muted transition-colors"
-                                        title={isTimerRunning ? 'Pause' : 'Resume'}
-                                    >
-                                        {isTimerRunning ? <Pause size={14} /> : <Play size={14} />}
-                                    </button>
-                                    <button
-                                        onClick={handleResetTimer}
-                                        className="p-1.5 rounded-lg hover:bg-white/10 text-txt-muted transition-colors"
-                                        title="Reset timer"
-                                    >
-                                        <RotateCcw size={14} />
-                                    </button>
-                                    <button
-                                        onClick={() => handleAddTime(300)}
-                                        className="p-1.5 rounded-lg hover:bg-white/10 text-txt-muted transition-colors"
-                                        title="Add 5 minutes"
-                                    >
-                                        <PlusCircle size={14} />
-                                    </button>
-                                    <button
-                                        onClick={() => handleAddTime(600)}
-                                        className="p-1.5 rounded-lg hover:bg-white/10 text-txt-muted transition-colors"
-                                        title="Add 10 minutes"
-                                    >
-                                        <PlusCircle size={14} className="text-cyan" />
-                                    </button>
-                                </>
-                            )}
-                            <button
-                                onClick={handleSetTimer}
-                                className="p-1.5 rounded-lg hover:bg-white/10 text-txt-muted transition-colors"
-                                title="Set timer"
-                            >
-                                <Timer size={14} />
-                            </button>
-                        </div>
-                    )}
-                    {mode === 'INTERVIEW' && (
-                        <div className="flex items-center gap-2">
-                            <ModeTimer mode="INTERVIEW" sessionId={currentSessionId} />
-                            {isActiveInterview && (
-                                <button
-                                    onClick={handleEndInterview}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-neon-red/25 bg-neon-red/10 px-2.5 py-1.5 text-xs font-medium text-neon-red hover:bg-neon-red/20 transition-colors"
-                                    title="End interview"
-                                >
-                                    <StopCircle size={14} /> End
-                                </button>
-                            )}
-                        </div>
+                    {isInterviewStarted && (
+                        <button
+                            onClick={handleQuitInterview}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-neon-red/30 bg-neon-red/10 text-neon-red hover:bg-neon-red/20 transition-colors"
+                            title="End interview"
+                        >
+                            <XCircle size={14} /> Quit Interview
+                        </button>
                     )}
 
                     <button
@@ -280,12 +226,6 @@ export function TopBar({ onToggleSidebar }) {
                 </div>,
                 document.body
             )}
-
-            <LearningTimerModal
-                isOpen={showTimerModal}
-                onClose={() => setShowTimerModal(false)}
-                sessionId={currentSessionId}
-            />
         </>
     )
 }

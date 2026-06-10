@@ -69,7 +69,6 @@ export function LoginPage() {
       if (msg.includes('2FA') || msg.includes('code')) {
         setShowTotp(true)
         addToast('Enter your 2FA code', 'info')
-        // Store pending login data to retry with TOTP
         setPendingLoginData({ type: 'google', token: credentialResponse.credential })
       } else {
         addToast(msg, 'error')
@@ -78,20 +77,13 @@ export function LoginPage() {
   }
 
   const handleGithubLogin = () => {
-    // For GitHub, you need to implement a popup that gets the access token.
-    // This is a simplified version using a popup that redirects to your backend callback.
-    // But your backend expects a GitHub access token directly – the easiest is to use a library like @octokit/auth-oauth-app.
-    // Alternatively, add a backend endpoint that exchanges a code for token.
-    // Here's a placeholder that opens GitHub OAuth flow (you must set up a redirect URI to your frontend, then exchange code for token via backend).
     const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID
     const redirectUri = `${window.location.origin}/auth/github/callback`
-    const popup = window.open(
+    window.open(
         `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=user:email`,
         'github-auth',
         'width=600,height=700'
     )
-    // You'll need to handle the callback page (create a route /auth/github/callback) that extracts the code,
-    // sends it to your backend, and then receives the access token.
     addToast('GitHub login requires additional setup – see console', 'info')
   }
 
@@ -175,8 +167,15 @@ export function LoginPage() {
                 </button>
             )}
 
-            <NeonButton type="submit" variant="solid" size="lg" loading={isPending} className="w-full">
-              {showTotp ? 'Verify & Sign In' : 'Sign In'} <ArrowRight size={16} className="ml-2" />
+            <NeonButton
+                type="submit"
+                variant="solid"
+                size="lg"
+                loading={isPending}
+                className="w-full"
+            >
+              {showTotp ? 'Verify & Sign In' : 'Sign In'}
+              <ArrowRight size={16} />
             </NeonButton>
           </form>
 

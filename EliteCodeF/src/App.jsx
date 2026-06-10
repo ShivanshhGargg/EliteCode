@@ -15,7 +15,6 @@ import NotFoundPage from './pages/NotFoundPage'
 import AttemptsPage from './pages/AttemptsPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
-import { ProblemsPage } from './pages/ProblemsPage'
 import { AdminProblemsPage } from './pages/AdminProblemsPage'
 import { UserProgressPage } from './pages/UserProgressPage'
 import { AccountSettingsPage } from './pages/AccountSettingsPage'
@@ -83,7 +82,6 @@ export default function App() {
 
               <Route path="/" element={<ProtectedRoute><WorkspacePage /></ProtectedRoute>} />
               <Route path="/attempts" element={<ProtectedRoute><AttemptsPage /></ProtectedRoute>} />
-              <Route path="/problems" element={<ProtectedRoute><ProblemsPage /></ProtectedRoute>} />
 
               <Route path="/admin/problems" element={<AdminRoute><AdminProblemsPage /></AdminRoute>} />
               <Route path="/progress" element={<ProtectedRoute><UserProgressPage /></ProtectedRoute>} />

@@ -50,8 +50,9 @@ axiosClient.interceptors.response.use(
     (res) => res,
     async (error) => {
       const original = error.config
-      // ✅ Also treat 403 as auth error
-      if ((error.response?.status === 401 || error.response?.status === 403) && !original._retry) {
+      const status = error.response?.status
+      // If 400 (bad request) on refresh endpoint, do not retry
+      if ((status === 401 || status === 403) && !original._retry) {
         original._retry = true
         if (isRefreshing) {
           return new Promise((resolve) => {
@@ -65,9 +66,7 @@ axiosClient.interceptors.response.use(
         try {
           const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {}, { withCredentials: true })
           const newAccessToken = extractAccessToken(data)
-          if (!newAccessToken) {
-            throw new Error('Missing access token in refresh response')
-          }
+          if (!newAccessToken) throw new Error('Missing access token')
           const currentUser = useAuthStore.getState().user
           const refreshedUser = extractUser(data, currentUser)
           useAuthStore.getState().setAuth(refreshedUser, newAccessToken)
@@ -76,7 +75,7 @@ axiosClient.interceptors.response.use(
           original.headers.Authorization = `Bearer ${newAccessToken}`
           return axiosClient(original)
         } catch (refreshError) {
-          // Refresh failed – force logout
+          // If refresh returns 400, treat as auth failure and logout
           useAuthStore.getState().logout()
           localStorage.removeItem('user')
           const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email']

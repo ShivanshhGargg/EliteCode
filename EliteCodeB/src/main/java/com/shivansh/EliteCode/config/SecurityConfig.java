@@ -3,6 +3,7 @@ package com.shivansh.EliteCode.config;
 import com.shivansh.EliteCode.filter.RateLimitingFilter;
 import com.shivansh.EliteCode.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,7 +27,8 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-
+    @Value("${elitecode.frontend.base-url}")
+    private String frontendBaseUrl;
     // SecurityConfig.java
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) {
@@ -47,7 +49,7 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of(
                 "http://localhost:5173",
-                "https://elitecode-ashen.vercel.app"
+                frontendBaseUrl
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));

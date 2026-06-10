@@ -20,8 +20,12 @@ public class AiConfig {
                 .baseUrl(baseUrl)
                 .defaultHeader("Authorization", "Bearer " + apiKey)
                 .defaultHeader("Content-Type", "application/json")
-                .defaultHeader("HTTP-Referer", "http://localhost:8080") // optional, your app URL
-                .defaultHeader("X-Title", "EliteCode")               // optional
+                .defaultHeader("HTTP-Referer", "http://localhost:8080")
+                .defaultHeader("X-Title", "EliteCode")
+                .requestFactory(new org.springframework.http.client.SimpleClientHttpRequestFactory() {{
+                    setConnectTimeout(30000);
+                    setReadTimeout(60000);
+                }})
                 .build();
     }
 }

@@ -9,11 +9,15 @@ export const hintService = {
     return res.data
   },
   generateSessionTitle: async ({ mode, problemTitle = '', conversation }) => {
-    const res = await axiosClient.post('/hints/title', {
-      mode,
-      problemTitle,
-      conversation,
-    })
-    return res.data
+    try {
+      const res = await axiosClient.post('/hints/title', {
+        mode,
+        problemTitle,
+        conversation,
+      })
+      return res.data
+    } catch {
+      return null
+    }
   },
 }

@@ -79,9 +79,7 @@ export function ModeTimer({ mode, sessionId }) {
                     <Clock size={14} />
                     <span>{displayText}</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-cyan">
-                    <span>Score: {sessionData.score}</span>
-                </div>
+                {/* Score removed per user request - will be shown after interview ends */}
             </div>
         )
     } else if (mode === 'LEARNING') {

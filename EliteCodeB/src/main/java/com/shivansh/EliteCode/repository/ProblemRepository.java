@@ -35,4 +35,12 @@ public interface ProblemRepository extends JpaRepository<Problem, UUID> {
     Page<Problem> findByTagsIn(@Param("tags") List<String> tags, Pageable pageable);
 
     Optional<Problem> findByHash(String hash);
+
+
+    @Query("SELECT p FROM Problem p WHERE p.deleted = false " +
+            "AND (:difficulty IS NULL OR p.difficulty = :difficulty) " +
+            "AND (:title IS NULL OR LOWER(p.title) LIKE LOWER(CONCAT('%', :title, '%')))")
+    Page<Problem> findAllByFilters(@Param("difficulty") Difficulty difficulty,
+                                   @Param("title") String title,
+                                   Pageable pageable);
 }

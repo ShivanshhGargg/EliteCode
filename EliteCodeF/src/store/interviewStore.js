@@ -50,7 +50,6 @@ const useInterviewStore = create(persist((set, get) => ({
             };
         }),
 
-    // New timer control methods
     pauseTimer: (sessionId) =>
         set((state) => {
             const session = state.sessions[sessionId];
@@ -67,7 +66,6 @@ const useInterviewStore = create(persist((set, get) => ({
         set((state) => {
             const session = state.sessions[sessionId];
             if (!session) return state;
-            // Adjust startTime so that elapsed remains correct after resume
             const now = Date.now();
             const newStartTime = now - (session.elapsed * 1000);
             return {
@@ -131,6 +129,20 @@ const useInterviewStore = create(persist((set, get) => ({
                 },
             };
         }),
+
+    // New: completely remove session from store (for quitting)
+    clearSession: (sessionId) =>
+        set((state) => {
+            const newSessions = { ...state.sessions };
+            delete newSessions[sessionId];
+            return { sessions: newSessions };
+        }),
+
+    // End interview and clear it (quits)
+    endAndClearInterview: (sessionId) => {
+        get().endSession(sessionId);
+        get().clearSession(sessionId);
+    },
 
     resetSession: (sessionId) =>
         set((state) => {

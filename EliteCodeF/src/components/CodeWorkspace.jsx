@@ -1,16 +1,19 @@
 import { useState, useEffect, useRef } from 'react'
-import { Play, Bug, CheckCircle, ChevronDown, Clock, Cpu, Minimize2, Maximize2, GripHorizontal, Loader2, Terminal } from 'lucide-react'
+import { Play, Bug, CheckCircle, ChevronDown, Clock, Cpu, Minimize2, Maximize2, GripHorizontal, Loader2, Terminal, X, Pause, RotateCcw, PlusCircle, Timer } from 'lucide-react'
 import { useMutation } from '@tanstack/react-query'
 import { attemptService } from '../api/attemptService'
 import { hintService } from '../api/hintService'
 import useChatStore from '../store/chatStore'
 import useToastStore from '../store/toastStore'
 import useWorkspaceStore from '../store/workspaceStore'
+import useInterviewStore from '../store/interviewStore'
 import { CodeEditor } from './CodeEditor'
 import { NeonButton } from './NeonButton'
 import { usePollAttempt } from '../hooks/usePollAttempt'
 import { getErrorMessage } from '../utils/error'
 import { formatTime } from '../utils/format'
+import { ModeTimer } from './ModeTimer'
+import { LearningTimerModal } from './LearningTimerModal'
 
 const STARTER_CODE = {
   JAVA: `class Solution {
@@ -38,24 +41,32 @@ public:
 
 const LANGUAGES = [
   { value: 'JAVA', label: 'Java' },
+  { value: 'CPP', label: 'C++' },
   { value: 'PYTHON', label: 'Python' },
   { value: 'JAVASCRIPT', label: 'JavaScript' },
-  { value: 'CPP', label: 'C++' },
 ]
 
-export function CodeWorkspace({ workspaceControls = null }) {
+export function CodeWorkspace({ workspaceControls = null, onCloseProblem = null }) {
   const [code, setCode] = useState(STARTER_CODE.JAVA)
   const [language, setLanguage] = useState('JAVA')
   const [attemptId, setAttemptId] = useState(null)
   const [feedback, setFeedback] = useState(null)
-  const [resultsHeight, setResultsHeight] = useState(35) // percentage of available space
+  const [resultsHeight, setResultsHeight] = useState(35)
   const [isResultsMinimized, setIsResultsMinimized] = useState(false)
+  const [showTimerModal, setShowTimerModal] = useState(false)
   const isDraggingHeight = useRef(false)
   const containerRef = useRef(null)
 
   const { mode, currentSessionId, markSessionWork, updateSessionTitle } = useChatStore()
   const { addToast } = useToastStore()
-  const { selectedProblem } = useWorkspaceStore()
+  const { getSelectedProblem } = useWorkspaceStore()
+  const { pauseTimer, resumeTimer, resetTimer, addTime, getSession } = useInterviewStore()
+
+  const selectedProblem = getSelectedProblem(mode)
+  const sessionData = getSession(currentSessionId)
+  const isTimerRunning = sessionData?.started && !sessionData?.paused
+  const hasTimer = sessionData?.timeLimit != null
+  const isLearningOrInterview = mode === 'LEARNING' || mode === 'INTERVIEW'
 
   const { mutate: submit, isPending: isSubmitting } = useMutation({
     mutationFn: () => {
@@ -70,18 +81,19 @@ export function CodeWorkspace({ workspaceControls = null }) {
           language
       )
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setAttemptId(data.id)
       setFeedback(null)
       if (currentSessionId) {
-        markSessionWork(currentSessionId)
-        hintService.generateSessionTitle({
-          mode,
-          problemTitle: selectedProblem?.title || '',
-          conversation: `${language} code run submitted for ${selectedProblem?.title || 'a coding problem'}\n${code.slice(0, 1200)}`,
-        }).then((result) => {
-          if (result?.title) updateSessionTitle(currentSessionId, result.title)
-        }).catch(() => {})
+        await markSessionWork(currentSessionId)
+        try {
+          const result = await hintService.generateSessionTitle({
+            mode,
+            problemTitle: selectedProblem?.title || '',
+            conversation: `${language} code run submitted for ${selectedProblem?.title || 'a coding problem'}\n${code.slice(0, 1200)}`,
+          })
+          if (result?.title) await updateSessionTitle(currentSessionId, result.title)
+        } catch (err) {}
       }
     },
     onError: (err) => addToast(getErrorMessage(err), 'error'),
@@ -109,17 +121,33 @@ export function CodeWorkspace({ workspaceControls = null }) {
   }
 
   const handleDebug = () => {
-    if (!selectedProblem?.id) {
-      return
-    }
+    if (!selectedProblem?.id) return
     submit()
   }
 
   const handleSubmitAttempt = () => {
-    if (!selectedProblem?.id) {
-      return
-    }
+    if (!selectedProblem?.id) return
     submit()
+  }
+
+  const handlePauseResume = () => {
+    if (!currentSessionId) return
+    if (isTimerRunning) pauseTimer(currentSessionId)
+    else resumeTimer(currentSessionId)
+  }
+
+  const handleResetTimer = () => {
+    if (!currentSessionId) return
+    resetTimer(currentSessionId)
+  }
+
+  const handleAddTime = (seconds) => {
+    if (!currentSessionId) return
+    addTime(currentSessionId, seconds)
+  }
+
+  const handleSetTimer = () => {
+    setShowTimerModal(true)
   }
 
   const isLearnMode = mode === 'LEARNING'
@@ -155,10 +183,9 @@ export function CodeWorkspace({ workspaceControls = null }) {
     document.addEventListener('mouseup', handleMouseUp)
   }
 
-  // Calculate editor height based on results panel state
   const getEditorHeight = () => {
     if (isResultsMinimized) return '100%'
-    return `calc(100% - ${resultsHeight}% - 12px)` // 12px for gap + handle
+    return `calc(100% - ${resultsHeight}% - 12px)`
   }
 
   return (
@@ -186,6 +213,51 @@ export function CodeWorkspace({ workspaceControls = null }) {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Timer display and controls for Learning/Interview */}
+            {isLearningOrInterview && (
+                <div className="flex items-center gap-2 mr-2">
+                  <ModeTimer mode={mode} sessionId={currentSessionId} />
+                  {hasTimer && (
+                      <>
+                        <button
+                            onClick={handlePauseResume}
+                            className="p-1.5 rounded-lg hover:bg-white/10 text-txt-muted transition-colors"
+                            title={isTimerRunning ? 'Pause' : 'Resume'}
+                        >
+                          {isTimerRunning ? <Pause size={14} /> : <Play size={14} />}
+                        </button>
+                        <button
+                            onClick={handleResetTimer}
+                            className="p-1.5 rounded-lg hover:bg-white/10 text-txt-muted transition-colors"
+                            title="Reset timer"
+                        >
+                          <RotateCcw size={14} />
+                        </button>
+                        <button
+                            onClick={() => handleAddTime(300)}
+                            className="p-1.5 rounded-lg hover:bg-white/10 text-txt-muted transition-colors"
+                            title="Add 5 minutes"
+                        >
+                          <PlusCircle size={14} />
+                        </button>
+                        <button
+                            onClick={() => handleAddTime(600)}
+                            className="p-1.5 rounded-lg hover:bg-white/10 text-txt-muted transition-colors"
+                            title="Add 10 minutes"
+                        >
+                          <PlusCircle size={14} className="text-cyan" />
+                        </button>
+                      </>
+                  )}
+                  <button
+                      onClick={handleSetTimer}
+                      className="p-1.5 rounded-lg hover:bg-white/10 text-txt-muted transition-colors"
+                      title="Set timer"
+                  >
+                    <Timer size={14} />
+                  </button>
+                </div>
+            )}
             <NeonButton variant="ghost" size="sm" onClick={handleDebug} disabled={isLoading}>
               <Bug size={12} className="mr-1" /> Debug
             </NeonButton>
@@ -268,9 +340,9 @@ export function CodeWorkspace({ workspaceControls = null }) {
                               <div className="space-y-1.5 max-h-32 overflow-y-auto">
                                 {testResults.map((tc, idx) => (
                                     <div key={idx} className={`text-xs p-1.5 rounded ${tc.passed ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
-                            <span className={tc.passed ? 'text-neon-green' : 'text-neon-red'}>
-                              {tc.passed ? '✓' : '✗'} Test {idx + 1}
-                            </span>
+                                      <span className={tc.passed ? 'text-neon-green' : 'text-neon-red'}>
+                                        {tc.passed ? '✓' : '✗'} Test {idx + 1}
+                                      </span>
                                       {!tc.passed && tc.expected !== undefined && (
                                           <div className="text-txt-muted mt-0.5 text-[11px]">
                                             Expected: {String(tc.expected)}<br />
@@ -293,6 +365,12 @@ export function CodeWorkspace({ workspaceControls = null }) {
             )}
           </div>
         </div>
+
+        <LearningTimerModal
+            isOpen={showTimerModal}
+            onClose={() => setShowTimerModal(false)}
+            sessionId={currentSessionId}
+        />
       </div>
   )
 }

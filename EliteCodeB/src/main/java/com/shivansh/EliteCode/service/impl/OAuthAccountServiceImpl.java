@@ -22,50 +22,54 @@ public class OAuthAccountServiceImpl implements OAuthAccountService {
     private final AccountRepository accountRepository;
 
     @Override
-    @Transactional  // still needed for the find+create atomicity
-    public Account upsertOAuthAccount(String provider, String providerId, String email,
-                                      String firstName, String lastName) {
-        // 1. Check existing
-        Optional<Account> existing = accountRepository.findByUserEmailAndProvider(email, provider);
-        if (existing.isPresent()) {
-            Account account = existing.get();
-            if (providerId != null && !providerId.isBlank() &&
-                    (account.getProviderId() == null || account.getProviderId().isBlank())) {
-                account.setProviderId(providerId);
-                account.setEmailVerified(true);
-                account = accountRepository.save(account);
-            }
-            return account;
+    @Transactional
+    public Account upsertOAuthAccount(String provider, String providerId, String email, String firstName, String lastName) {
+        // 1. First, try to find an existing Account linked to this OAuth provider
+        Optional<Account> existingAccount = accountRepository.findByUserEmailAndProvider(email, provider);
+
+        if (existingAccount.isPresent()) {
+            // Account already linked, just return it
+            return existingAccount.get();
         }
 
-        // 2. Create user if needed
-        User user = userRepository.findByEmail(email).orElseGet(() -> {
-            User newUser = User.builder()
-                    .firstName(firstName == null || firstName.isBlank() ? "User" : firstName)
-                    .lastName(lastName)
-                    .email(email)
-                    .build();
-            return userRepository.saveAndFlush(newUser);
-        });
+        // 2. If not found, check if a User already exists with this email via a local account
+        Optional<User> existingUser = userRepository.findByEmail(email);
 
-        // 3. Create and flush account directly
+        if (existingUser.isPresent()) {
+            // User exists via local auth: Link the OAuth provider to this existing user
+            User user = existingUser.get();
+            Account newLinkedAccount = Account.builder()
+                    .user(user)
+                    .provider(provider)
+                    .providerId(providerId)
+                    .role(Account.Role.USER)
+                    .emailVerified(true) // Google emails are already verified
+                    .enabled(true)
+                    .accountNonLocked(true)
+                    .loginAttempts(0)
+                    .build();
+            user.addAccount(newLinkedAccount);
+            return accountRepository.save(newLinkedAccount);
+        }
+
+        // 3. No existing user or account found: Create a brand-new user and link the OAuth account
+        User newUser = User.builder()
+                .firstName(firstName)
+                .lastName(lastName)
+                .email(email)
+                .build();
+
         Account newAccount = Account.builder()
+                .user(newUser)
                 .provider(provider)
                 .providerId(providerId)
                 .role(Account.Role.USER)
                 .emailVerified(true)
                 .enabled(true)
                 .accountNonLocked(true)
-                .loginAttempts(0)
                 .build();
-        newAccount.setUser(user);   // set the user
-        try {
-            return accountRepository.saveAndFlush(newAccount);  // 🔥 immediate insert
-        } catch (DataIntegrityViolationException e) {
-            // Another thread inserted the account – fetch and return it
-            log.warn("Duplicate account on insert for {} / {}", email, provider);
-            return accountRepository.findByUserEmailAndProvider(email, provider)
-                    .orElseThrow(() -> new CustomExceptions.BadRequestException("Failed to create account, please retry"));
-        }
+
+        newUser.addAccount(newAccount);
+        return accountRepository.save(newAccount);
     }
 }

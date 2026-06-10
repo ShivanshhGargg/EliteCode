@@ -1,5 +1,6 @@
 package com.shivansh.EliteCode.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -43,6 +44,7 @@ public class User {
     @Column(updatable = false)
     private LocalDateTime createdAt;
 
+    @JsonIgnore
     @Builder.Default
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Account> accounts = new ArrayList<>();
