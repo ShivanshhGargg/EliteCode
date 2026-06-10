@@ -27,7 +27,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    @Value("${elitecode.frontend.base-url}")
+    @Value("${elitecode.frontend.base-url:http://localhost:5173}")
     private String frontendBaseUrl;
     // SecurityConfig.java
     @Bean
